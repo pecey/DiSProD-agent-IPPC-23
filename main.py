@@ -69,7 +69,7 @@ def main(env, inst, method_name=None, episodes=1):
 
     key = jax.random.PRNGKey(42)
 
-    cfg = prepare_config(env, "config")
+    cfg = prepare_config("_".join(env.lower().split()), "config")
 
     agent = ContinuousDisprod(env, cfg, key , config_rddlsim)
 

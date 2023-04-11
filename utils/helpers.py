@@ -29,6 +29,17 @@ def ns_and_reward(cpfs, s_keys, a_keys, ns_keys, const_dict, levels, extra_param
 
     return jnp.hstack([subs[k] for k in ns_keys]), reward
 
+def prepare_index_mapping(keys, grounded_names, noise_vars=False):
+    mapping = {}
+    idx = 0
+    for k in keys:
+        n_obj = len(grounded_names[k])
+        mapping[k] = (idx, idx + n_obj)
+        idx = idx + n_obj
+    for k in DISPROD_NOISE_VARS:
+        mapping[k] = (idx, idx + 1)
+        idx = idx + 1
+    return mapping    
 
 
 def reparam(groups, dist):
