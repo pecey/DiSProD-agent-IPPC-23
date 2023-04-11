@@ -1,0 +1,32 @@
+env_name: ???
+depth: ???
+discrete: ???
+n_episodes: 5
+debug_planner: True
+render: False
+seed: 42
+save_actions: True
+
+
+cem:
+  n_samples: 200
+  optimization_steps: 10
+  elite_size: 20
+
+mppi:
+  n_samples: 2000
+  optimization_steps: 10
+  gamma: 1.0
+
+disprod:
+  step_size: 0.001
+  step_size_var: 0.001
+  n_restarts: 200
+  choose_action_mean: False
+  reward_fn_using_taylor: True
+  max_grad_steps: 10
+  # Modes: complete, action_var_only, no_var
+  taylor_expansion_mode: complete
+  convergance_threshold: 0.1
+  run_mode: production
+

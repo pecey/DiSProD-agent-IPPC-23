@@ -1,19 +1,25 @@
 import sys
 import signal
 import time
+import numpy as np
 
 from pyRDDLGym import RDDLEnv
 from pyRDDLGym import ExampleManager
 from pyRDDLGym.Policies.Agents import NoOpAgent
 
+
 ############################################################
 # IMPORT THE AGENT AND OTHER DEPENDENCIES OF YOUR SOLUTION #
-
-
+from utils import helpers
+from functools import partial
+from planners.continuous_disprod import ContinuousDisprod
+import jax
+from utils.common_utils import prepare_config
 
 
 ############################################################
 
+DISPROD_NOISE_VARS = ["disprod_eps_norm", "disprod_eps_uni"]
 
 def signal_handler(signum, frame):
     raise Exception("Timed out!")
@@ -43,8 +49,33 @@ def main(env, inst, method_name=None, episodes=1):
     ################################################################
     # Initialize your agent here:
     # remove the noop agent:
-    agent = NoOpAgent(action_space=myEnv.action_space,
-                        num_actions=myEnv.numConcurrentActions)
+
+    reward_fn, cpfs, const_dict, s_keys, a_keys, ga_keys, ns_keys, levels, grounded_names, extra_params = helpers.prepare_rddl_compilations(EnvInfo.get_domain(), EnvInfo.get_instance(inst))
+
+    obs_keys = [key for key in s_keys if key not in DISPROD_NOISE_VARS]
+    g_obs_keys = [k for k_ in obs_keys for k in grounded_names[k_]]
+
+    s_gs_idx = helpers.prepare_index_mapping(obs_keys, grounded_names, noise_vars=True)
+    a_ga_idx = helpers.prepare_index_mapping(a_keys, grounded_names, noise_vars=False)
+
+    ns_and_reward_fn = partial(helpers.ns_and_reward, cpfs, obs_keys + DISPROD_NOISE_VARS, a_keys, ns_keys, const_dict, levels, extra_params, reward_fn, s_gs_idx, a_ga_idx)
+
+    config_rddlsim = {}
+    config_rddlsim['transition_fn'] = ns_and_reward_fn
+    config_rddlsim['cpfs'] = cpfs
+    config_rddlsim['action_keys'] = ga_keys
+    config_rddlsim['pyrddlgym'] = True
+    config_rddlsim['const_dict'] = const_dict
+
+    key = jax.random.PRNGKey(42)
+
+    cfg = prepare_config(env, "config")
+
+    agent = ContinuousDisprod(env, cfg, key , config_rddlsim)
+
+    # agent = NoOpAgent(action_space=myEnv.action_space,
+    #                     num_actions=myEnv.numConcurrentActions)
+
 
 
     ################################################################
@@ -66,8 +97,9 @@ def main(env, inst, method_name=None, episodes=1):
                 try:
                     start = time.time()
                     #################################################################
+                    obs_array = np.array([state[i] for i in g_obs_keys])
                     # replace the following line of code with your agent call
-                    action = agent.sample_action()
+                    action = agent.choose_action(obs_array)
 
 
 

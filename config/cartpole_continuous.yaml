@@ -1,0 +1,15 @@
+env_name: cartpole-continuous
+depth: 25
+discrete: False
+
+cem:
+  n_samples: 200
+
+mppi:
+  n_samples: 200
+  gamma: 1.0
+
+sogbofa:
+  step_size: 10
+  step_size_var: 1
+  n_restarts: 200
