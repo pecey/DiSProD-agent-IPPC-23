@@ -70,6 +70,10 @@ def main(env, inst, method_name=None, episodes=1):
     key = jax.random.PRNGKey(42)
 
     cfg = prepare_config("_".join(env.lower().split()), "config")
+    
+    cfg["action_space"] = myEnv.action_space
+    cfg["nA"] = len(myEnv.action_space)
+    cfg["nS"] = len(myEnv.observation_space)
 
     agent = ContinuousDisprod(env, cfg, key , config_rddlsim)
 

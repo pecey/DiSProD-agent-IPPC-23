@@ -8,8 +8,8 @@ from planners.disprod import Disprod
 
 class DiscreteDisprod(Disprod):
 
-    def __init__(self, env, cfg, key, config_rddlsim={}):
-        super(DiscreteDisprod, self).__init__(env, cfg, key, config_rddlsim)
+    def __init__(self, cfg, key, config_rddlsim={}):
+        super(DiscreteDisprod, self).__init__(cfg, key, config_rddlsim)
 
         self.first_partials_fn = jax.jacfwd(self.dynamics_fn, argnums=(0, 1))
 
@@ -31,9 +31,7 @@ class DiscreteDisprod(Disprod):
             stacked_hessian = self.hessian(self.dynamics_fn, wrt)(s, a, self.env)
         return jax.numpy.diagonal(stacked_hessian, axis1=1, axis2=2)
 
-    def set_goal(self, goal_position):
-        self.env.goal_x, self.env.goal_y = goal_position
-
+    
     # actions: (n_restarts, depth, nA)
     def initialize_conformant_actions(self):
         n_batches = self.n_res // self.nA
