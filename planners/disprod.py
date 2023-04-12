@@ -37,7 +37,6 @@ class Disprod:
         self.last_chosen_action = None
         self.promising_restart = None
 
-        self.log_file = cfg["log_file"]
 
 
     def reset(self):

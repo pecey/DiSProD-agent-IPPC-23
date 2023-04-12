@@ -11,7 +11,6 @@ tfd = tfp.distributions
 
 class ShootingCEM():
     def __init__(self, cfg, key, config_rddlsim={}):
-        self.alg = cfg['alg']
         self.action_keys = config_rddlsim.get('action_keys', [])
         self.const_dict = config_rddlsim.get('const_dict', {})
         self.var_dict = config_rddlsim.get('var_dict', {})
@@ -20,12 +19,12 @@ class ShootingCEM():
         self.cpfs = config_rddlsim.get('cpfs')
         
         self.nA = len(self.action_keys)
+        self.alg = "cem"
             
-        self.plan_fn = self.evaluate_mppi if self.alg == "mppi" else self.evaluate_cem
+        self.plan_fn = self.evaluate_cem
         self.plan_horizon = cfg["depth"]
-        self.pop_size = cfg[self.alg]["n_samples"]
+        self.pop_size = cfg["cem"]["n_samples"]
         self.optimization_steps = cfg[self.alg]['optimization_steps']
-        self.mppi_gamma = cfg["mppi"]["gamma"]
         self._float = jnp.float32
         self.key = key
         self.elite_size = cfg["cem"]["elite_size"]

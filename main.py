@@ -3,6 +3,7 @@ import signal
 import time
 import numpy as np
 
+
 from pyRDDLGym import RDDLEnv
 from pyRDDLGym import ExampleManager
 from pyRDDLGym.Policies.Agents import NoOpAgent
@@ -15,6 +16,7 @@ from functools import partial
 from planners.continuous_disprod import ContinuousDisprod
 import jax
 from utils.common_utils import prepare_config
+from planners.shooting_cem import ShootingCEM
 
 
 ############################################################
@@ -75,7 +77,7 @@ def main(env, inst, method_name=None, episodes=1):
     cfg["nA"] = len(myEnv.action_space)
     cfg["nS"] = len(myEnv.observation_space)
 
-    agent = ContinuousDisprod(env, cfg, key , config_rddlsim)
+    agent = ShootingCEM(cfg, key , config_rddlsim)
 
     # agent = NoOpAgent(action_space=myEnv.action_space,
     #                     num_actions=myEnv.numConcurrentActions)
@@ -91,7 +93,7 @@ def main(env, inst, method_name=None, episodes=1):
         total_reward = 0
         state = myEnv.reset()
         timed_out = False
-        elapsed = budget
+        elapsed = budget + 10000
         finish = start = 0
         for step in range(myEnv.horizon):
 
@@ -104,6 +106,8 @@ def main(env, inst, method_name=None, episodes=1):
                     obs_array = np.array([state[i] for i in g_obs_keys])
                     # replace the following line of code with your agent call
                     action = agent.choose_action(obs_array)
+                    action = {k : v.item() for k , v in zip(ga_keys , action)}
+
 
 
 
@@ -119,6 +123,7 @@ def main(env, inst, method_name=None, episodes=1):
                     elapsed = elapsed - (finish-start)
             else:
                 action = defaultAgent.sample_action()
+
 
             next_state, reward, done, info = myEnv.step(action)
             total_reward += reward

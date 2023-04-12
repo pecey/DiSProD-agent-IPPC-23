@@ -56,4 +56,4 @@ def prepare_config(env_name, cfg_path=None, log_path=None):
     config = {}
     for config_file in config_files:
         config = OmegaConf.merge(config, load_config_if_exists(config_file, log_path))
-    return config
+    return OmegaConf.to_container(config)
