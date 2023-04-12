@@ -7,3 +7,5 @@ ply
 jax==0.4.3
 jaxlib==0.4.3
 omegaconf
+optax
+tensorflow-probability>=0.16.0

@@ -1,7 +1,5 @@
 class Disprod:
-    def __init__(self, env, cfg, key, config_rddlsim):
-        self.env = env
-        
+    def __init__(self, cfg, key, config_rddlsim):
         self.a_keys = config_rddlsim.get('action_keys', [])
         self.const_dict = config_rddlsim.get('const_dict', {})
         self.var_dict = config_rddlsim.get('var_dict', {})
@@ -9,9 +7,9 @@ class Disprod:
         self.dynamics_fn = config_rddlsim.get('transition_fn')
         self.reward_fn = config_rddlsim.get('reward_fn')
 
-        self.nA = len(env.action_space)
+        self.nA = cfg["nA"]
         # +1 due to addition of noise variable as a pseduo-state variable.
-        self.nS = len(env.observation_space)
+        self.nS = cfg["nS"]
         
         self.depth = cfg.get("depth")
         self.device = cfg.get("device")

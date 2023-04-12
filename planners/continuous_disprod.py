@@ -9,11 +9,11 @@ import numpy as np
 
 
 class ContinuousDisprod(Disprod):
-    def __init__(self, env, cfg, key, config_rddlsim={}):
-        super(ContinuousDisprod, self).__init__(env, cfg, key, config_rddlsim)
+    def __init__(self, cfg, key, config_rddlsim={}):
+        super(ContinuousDisprod, self).__init__(cfg, key, config_rddlsim)
     
-        self.ac_lb = np.array([env.action_space[a].low[0] for a in self.a_keys])
-        self.ac_ub = np.array([env.action_space[a].high[0] for a in self.a_keys])
+        self.ac_lb = np.array([cfg["action_space"][a].low[0] for a in self.a_keys])
+        self.ac_ub = np.array([cfg["action_space"][a].high[0] for a in self.a_keys])
 
         # Multiplicative factor used to transform free_action variables to the legal range.
         self.multiplicative_factor = self.ac_ub - self.ac_lb
@@ -120,58 +120,58 @@ class ContinuousDisprod(Disprod):
             state_means, action_means, 1)
         return sop_wrt_state, sop_wrt_action
 
-    def update_actions(self, val):
-        free_action_mean, free_action_variance, n_grad_steps, has_converged, stacked_state, opt_state_mean, opt_state_var, tmp = val
-        while n_grad_steps < self.max_grad_steps and not has_converged:
-            # free_action_mean_old = free_action_mean.copy()
-            # free_action_variance_old = free_action_variance.copy()
+    # def update_actions(self, val):
+    #     free_action_mean, free_action_variance, n_grad_steps, has_converged, stacked_state, opt_state_mean, opt_state_var, tmp = val
+    #     while n_grad_steps < self.max_grad_steps and not has_converged:
+    #         # free_action_mean_old = free_action_mean.copy()
+    #         # free_action_variance_old = free_action_variance.copy()
 
-            # Transform action means and variance from (0,1) to permissible action ranges
-            action_means = self.transform_ac_mean(free_action_mean)
-            action_variance = self.transform_ac_var(free_action_variance)
+    #         # Transform action means and variance from (0,1) to permissible action ranges
+    #         action_means = self.transform_ac_mean(free_action_mean)
+    #         action_variance = self.transform_ac_var(free_action_variance)
 
-            (reward, _), (grad_mean, grad_var) = jax.vmap(jax.value_and_grad(self.q, argnums=(
-                1, 2), has_aux=True), in_axes=(0, 0, 0), out_axes=0)(stacked_state, action_means, action_variance)
+    #         (reward, _), (grad_mean, grad_var) = jax.vmap(jax.value_and_grad(self.q, argnums=(
+    #             1, 2), has_aux=True), in_axes=(0, 0, 0), out_axes=0)(stacked_state, action_means, action_variance)
 
-            # Loss is negative of Q-value.
-            opt_state_mean = self.opt_update_mean(
-                n_grad_steps, -grad_mean, opt_state_mean, 0, 1)
-            free_action_mean_ = self.get_params_mean(opt_state_mean)
+    #         # Loss is negative of Q-value.
+    #         opt_state_mean = self.opt_update_mean(
+    #             n_grad_steps, -grad_mean, opt_state_mean, 0, 1)
+    #         free_action_mean_ = self.get_params_mean(opt_state_mean)
 
-            wiggle_room = jnp.minimum(
-                free_action_mean_ - 0, 1 - free_action_mean_)
-            opt_state_var = self.opt_update_var(
-                n_grad_steps, -grad_var, opt_state_var, 0, jnp.minimum(1/12, jnp.square(wiggle_room)/12))
-            free_action_variance_ = self.get_params_var(opt_state_var)
+    #         wiggle_room = jnp.minimum(
+    #             free_action_mean_ - 0, 1 - free_action_mean_)
+    #         opt_state_var = self.opt_update_var(
+    #             n_grad_steps, -grad_var, opt_state_var, 0, jnp.minimum(1/12, jnp.square(wiggle_room)/12))
+    #         free_action_variance_ = self.get_params_var(opt_state_var)
 
-            updated_action_means = self.transform_ac_mean(free_action_mean_)
-            updated_action_variance = self.transform_ac_var(
-                free_action_variance_)
+    #         updated_action_means = self.transform_ac_mean(free_action_mean_)
+    #         updated_action_variance = self.transform_ac_var(
+    #             free_action_variance_)
 
-            updated_reward, _ = jax.vmap(self.q, in_axes=(0, 0, 0), out_axes=0)(
-                stacked_state, updated_action_means, updated_action_variance)
+    #         updated_reward, _ = jax.vmap(self.q, in_axes=(0, 0, 0), out_axes=0)(
+    #             stacked_state, updated_action_means, updated_action_variance)
 
-            restarts_to_reset = jnp.where(updated_reward < reward, jnp.ones(
-                self.n_res, dtype=jnp.int32), jnp.zeros(self.n_res, dtype=jnp.int32))
-            mask = jnp.tile(restarts_to_reset, (self.depth,
-                            self.nA, 1)).transpose(2, 0, 1)
-            free_action_mean_final = free_action_mean * \
-                mask + free_action_mean_ * (1-mask)
-            free_action_variance_final = free_action_variance * \
-                mask + free_action_variance_ * (1-mask)
+    #         restarts_to_reset = jnp.where(updated_reward < reward, jnp.ones(
+    #             self.n_res, dtype=jnp.int32), jnp.zeros(self.n_res, dtype=jnp.int32))
+    #         mask = jnp.tile(restarts_to_reset, (self.depth,
+    #                         self.nA, 1)).transpose(2, 0, 1)
+    #         free_action_mean_final = free_action_mean * \
+    #             mask + free_action_mean_ * (1-mask)
+    #         free_action_variance_final = free_action_variance * \
+    #             mask + free_action_variance_ * (1-mask)
 
-            tmp.at[n_grad_steps].set(jnp.sum(restarts_to_reset))
+    #         tmp.at[n_grad_steps].set(jnp.sum(restarts_to_reset))
 
-            mean_epsilon = free_action_mean_final - free_action_mean
-            variance_epsilon = free_action_variance_final - free_action_variance
+    #         mean_epsilon = free_action_mean_final - free_action_mean
+    #         variance_epsilon = free_action_variance_final - free_action_variance
 
-            free_action_mean = free_action_mean_final
-            free_action_variance = free_action_variance_final
+    #         free_action_mean = free_action_mean_final
+    #         free_action_variance = free_action_variance_final
 
-            has_converged = jnp.max(jnp.abs(mean_epsilon)) < self.convergance_threshold and jnp.max(
-                jnp.abs(variance_epsilon)) < self.convergance_threshold
-            n_grad_steps += 1
-        return free_action_mean_final, free_action_variance_final, n_grad_steps, None, None, None, tmp
+    #         has_converged = jnp.max(jnp.abs(mean_epsilon)) < self.convergance_threshold and jnp.max(
+    #             jnp.abs(variance_epsilon)) < self.convergance_threshold
+    #         n_grad_steps += 1
+    #     return free_action_mean_final, free_action_variance_final, n_grad_steps, None, None, None, tmp
 
     def have_actions_converged(self, val):
         _, _, n_grad_steps, has_converged, _, _, _, _ = val
@@ -245,38 +245,10 @@ class ContinuousDisprod(Disprod):
     def rollout_graph(self, d, params):
         agg_reward, s_mu, s_var, a_mu, a_var, tau = params
 
-        # Compute next state expectation
+        # Compute next state distribution and reward
         ns_mu, ns_var, reward = self.dynamics_dist_fn(s_mu, s_var, a_mu[d, :], a_var[d, :])
-        
-        # # Compute immediate reward
-        # reward, _, _ = self.reward_fn(ns_mu, s_mu, s_var, self.key)
-
-        # Update trajectory placeholder
-        # trajectory = trajectory.at[0, d].set(state_expectation)
-        # trajectory = trajectory.at[1, d].set(state_variance)
-
+    
         return agg_reward+reward, ns_mu, ns_var, a_mu, a_var, tau
-
-    def q(self, state, action_means, action_variance):
-        # augment state by adding variable for noise
-        state_expectation = jnp.concatenate((state, jnp.array([0])), 0)
-        # state_variance = jnp.concatenate((jnp.zeros_like(state), jnp.array([1])), 0)
-        # Workaround to make state_variance batched
-        state_variance = jnp.concatenate((state * 0, jnp.array([1])), 0)
-        aggregate_reward = jnp.array(0.0)
-        trajectory = jnp.zeros((2, self.depth, self.nS))
-        for d in range(self.depth):
-            reward = self.reward_dist_fn(
-                state_expectation, state_variance, action_means[d, :], action_variance[d, :], self.env)
-            aggregate_reward += reward
-            state_expectation, state_variance = jax.jit(self.dynamics_dist_fn)(
-                state_expectation, state_variance,
-                action_means[d, :], action_variance[d, :])
-
-            # Update trajectory
-            trajectory = trajectory.at[0, d].set(state_expectation)
-            trajectory = trajectory.at[1, d].set(state_variance)
-        return aggregate_reward.sum(), trajectory
 
     # Clamp each action between 0 and 1.
     @partial(jax.jit, static_argnums=(0,))
@@ -319,42 +291,10 @@ class ContinuousDisprod(Disprod):
 
         return ns_mu, ns_var
 
-    # Use only action variance
-    @partial(jax.jit, static_argnums=(0,))
-    def dynamics_av(self, s_mu, s_var, a_mu, a_var):
-        operands = s_mu, a_mu
-        ns = self.next_state_fn(*operands)
-
-        (_, fop_w_a), (_, sop_w_a) = self.partials_for_exact_fn(operands)
-
-        # Taylor's expansion
-        ns_mu = ns + 0.5*jnp.multiply(sop_w_a, a_var).sum(axis=1)
-        ns_var = jnp.multiply(jnp.square(fop_w_a), a_var).sum(axis=1)
-
-        ns_mu = jnp.concatenate([ns_mu, jnp.array([self.norm_noise_mu])], axis=0)
-        ns_var = jnp.concatenate([ns_var, jnp.array([self.noise_var])], axis=0)
-
-        # next_state_expectation = jnp.concatenate([next_state_expectation, jnp.array([self.noise_mean])], axis=0)
-        # next_state_variance = jnp.concatenate([next_state_variance, jnp.array([self.noise_var])], axis=0)
-
-        return ns_mu, ns_var
 
     @partial(jax.jit, static_argnums=(0,))
     def next_state_fn(self, state_mean, ac_mean):
         return self.dynamics_fn_wrapper(state_mean, ac_mean, None)
-
-    def dynamics_fop_fn_wrapper(self, operands):
-        state_means, action_means = operands
-        return jax.jacfwd(self.next_state, argnums=(0, 1))(state_means, action_means, self.env, self.alpha)[0]
-
-    def dynamics_sop_fn_wrapper(self, operands):
-        state_means, action_means = operands
-        sop_wrt_state = self.diag_hessian_of_transition(
-            state_means, action_means, 0)
-        sop_wrt_action = self.diag_hessian_of_transition(
-            state_means, action_means, 1)
-        return sop_wrt_state, sop_wrt_action
-
 
     def sop_numerical(self, operands):
         state_mean, ac_mean = operands

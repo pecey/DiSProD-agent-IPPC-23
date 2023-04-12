@@ -10,8 +10,7 @@ tfd = tfp.distributions
 
 
 class ShootingCEM():
-    def __init__(self, env, cfg, key, config_rddlsim={}):
-        self.env = env
+    def __init__(self, cfg, key, config_rddlsim={}):
         self.alg = cfg['alg']
         self.action_keys = config_rddlsim.get('action_keys', [])
         self.const_dict = config_rddlsim.get('const_dict', {})
@@ -38,9 +37,9 @@ class ShootingCEM():
         self.alpha = cfg.get('alpha', 0)
 
         
-        self.nS = cfg.get("nS", len(env.observation_space))
-        self.ac_lb = np.array([env.action_space[action].low[0] for action in self.action_keys])
-        self.ac_ub = np.array([env.action_space[action].high[0] for action in self.action_keys])
+        self.nS = cfg.get("nS")
+        self.ac_lb = np.array([cfg["action_space"][action].low[0] for action in self.action_keys])
+        self.ac_ub = np.array([cfg["action_space"][action].high[0] for action in self.action_keys])
         self.n_noise_var = 2
 
 
