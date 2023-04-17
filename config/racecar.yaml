@@ -10,7 +10,7 @@ mppi:
   n_samples: 200
   gamma: 1.0
 
-sogbofa:
+disprod:
   step_size: 10
   step_size_var: 1
   n_restarts: 200

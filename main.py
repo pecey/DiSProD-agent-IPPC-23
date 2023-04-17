@@ -89,7 +89,7 @@ def main(env, inst, method_name=None, episodes=1):
         total_reward = 0
         state = myEnv.reset()
         timed_out = False
-        elapsed = budget + 10000
+        elapsed = budget 
         finish = start = 0
         for step in range(myEnv.horizon):
 

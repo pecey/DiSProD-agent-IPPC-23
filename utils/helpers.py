@@ -114,7 +114,7 @@ def prepare_rddl_compilations(domain_path, instance_path):
             eps_default = f"{eps_str} : {{ state-fluent, real, default = 0.0 }};"
             pvar_pattern = re.compile('pvariables[\s]*{')
             eps_match = pvar_pattern.search(rddltxt)
-            rddltxt = f"{rddltxt[:eps_match.end()]} \n {eps_default} \n {rddltxt[optaxeps_match.end():]}"
+            rddltxt = f"{rddltxt[:eps_match.end()]} \n {eps_default} \n {rddltxt[eps_match.end():]}"
             
             eps_cpf_str = f"{eps_str}' = {eps_str};"
             cpf_pattern = re.compile('cpfs[\s]*{')
