@@ -21,8 +21,8 @@ def ns_and_reward(cpfs, s_keys, a_keys, ns_keys, const_dict, levels, extra_param
     state, action: grounded
     """
 
-    state_dict = {k: state[s_gs_idx[k][0] : s_gs_idx[k][1]].squeeze() for k in s_keys}
-    action_dict = {k: action[a_ga_idx[k][0] : a_ga_idx[k][1]].squeeze() for k in a_keys}
+    state_dict = {k: s_gs_idx[k][2](state[s_gs_idx[k][0] : s_gs_idx[k][1]]) for k in s_keys}
+    action_dict = {k: a_ga_idx[k][2](action[a_ga_idx[k][0] : a_ga_idx[k][1]]) for k in a_keys}
     
     subs = {**state_dict, **action_dict, **const_dict}
 
@@ -114,7 +114,7 @@ def prepare_rddl_compilations(domain_path, instance_path):
             eps_default = f"{eps_str} : {{ state-fluent, real, default = 0.0 }};"
             pvar_pattern = re.compile('pvariables[\s]*{')
             eps_match = pvar_pattern.search(rddltxt)
-            rddltxt = f"{rddltxt[:eps_match.end()]} \n {eps_default} \n {rddltxt[eps_match.end():]}"
+            rddltxt = f"{rddltxt[:eps_match.end()]} \n {eps_default} \n {rddltxt[optaxeps_match.end():]}"
             
             eps_cpf_str = f"{eps_str}' = {eps_str};"
             cpf_pattern = re.compile('cpfs[\s]*{')
