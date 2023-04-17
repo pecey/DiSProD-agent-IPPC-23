@@ -12,8 +12,9 @@ class ContinuousDisprod(Disprod):
     def __init__(self, cfg, key, config_rddlsim={}):
         super(ContinuousDisprod, self).__init__(cfg, key, config_rddlsim)
     
-        self.ac_lb = np.array([cfg["action_space"][a].low[0] for a in self.a_keys])
-        self.ac_ub = np.array([cfg["action_space"][a].high[0] for a in self.a_keys])
+        self.ac_lb = jnp.nan_to_num(np.array([cfg["action_space"][a].low[0] for a in self.a_keys]), posinf=100, neginf=-100)
+        self.ac_ub = jnp.nan_to_num(np.array([cfg["action_space"][a].high[0] for a in self.a_keys]), posinf=100, neginf=-100)
+
 
         # Multiplicative factor used to transform free_action variables to the legal range.
         self.multiplicative_factor = self.ac_ub - self.ac_lb
