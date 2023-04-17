@@ -79,10 +79,6 @@ def main(env, inst, method_name=None, episodes=1):
 
     agent = ShootingCEM(cfg, key , config_rddlsim)
 
-    # agent = NoOpAgent(action_space=myEnv.action_space,
-    #                     num_actions=myEnv.numConcurrentActions)
-
-
 
     ################################################################
 
