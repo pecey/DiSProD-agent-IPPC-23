@@ -77,7 +77,7 @@ def main(env, inst, method_name=None, episodes=1):
     cfg["nA"] = len(myEnv.action_space)
     cfg["nS"] = len(myEnv.observation_space)
 
-    agent = ShootingCEM(cfg, key , config_rddlsim)
+    agent = ContinuousDisprod(cfg, key , config_rddlsim)
 
 
     ################################################################
