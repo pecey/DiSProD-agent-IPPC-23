@@ -2,6 +2,7 @@ import sys
 import signal
 import time
 import numpy as np
+import os
 
 
 from pyRDDLGym import RDDLEnv
@@ -70,8 +71,9 @@ def main(env, inst, method_name=None, episodes=1):
     config_rddlsim['const_dict'] = const_dict
 
     key = jax.random.PRNGKey(42)
-
-    cfg = prepare_config("_".join(env.lower().split()), "config")
+    
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    cfg = prepare_config("_".join(env.lower().split()), f"{current_dir}/config")
     
     cfg["action_space"] = myEnv.action_space
     cfg["nA"] = len(myEnv.action_space)
