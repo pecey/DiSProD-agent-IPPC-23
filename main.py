@@ -7,7 +7,6 @@ from pyRDDLGym import RDDLEnv
 from pyRDDLGym import ExampleManager
 from pyRDDLGym.Policies.Agents import NoOpAgent
 import copy
-import multiprocessing as mp
 
 # for JAX backend:
 # from pyRDDLGym.Core.Jax.JaxRDDLSimulator import JaxRDDLSimulator
@@ -60,8 +59,8 @@ def main(env, inst, method_name=None, episodes=1):
     signal.setitimer(signal.ITIMER_REAL, init_budget)
     start = time.time()
     try:
-        ################################################################
-        # Initialize your agent here:
+    ################################################################
+    # Initialize your agent here:
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
         cfg = prepare_config("_".join(env.lower().split()), f"{current_dir}/config")
@@ -124,23 +123,6 @@ def main(env, inst, method_name=None, episodes=1):
         checkpoint=time.time()
         print(f"[Time: {checkpoint-start}] Loading the projection fn")
 
-        queue = mp.Queue()   
-        processes = []
-        scan_res = []
-        mode_args = ["complete", "no_var", "complete", "no_var"]
-        depth_args = [25, 25, 50, 50]
-
-        for idx in range(0, 4):
-            p = mp.Process(target=heuristics.compute_avg_action_time, args=(queue, myEnv, copy.deepcopy(cfg), cfg_env, g_obs_keys, ga_keys, mode_args[idx], depth_args[idx]))
-            p.start()
-            processes.append(p)
-    
-        for p in processes:
-            p.join()
-
-        while (not queue.empty()):
-            scan_res.append(queue.get())
-
         agent = ContinuousDisprod(cfg, cfg_env)
         checkpoint = time.time()
         print(f"[Time: {checkpoint-start}] Agent initialization complete")
@@ -149,6 +131,19 @@ def main(env, inst, method_name=None, episodes=1):
         prev_ac_seq, agent_key = agent.reset(agent_key)
         checkpoint = time.time()
         print(f"[Time: {checkpoint-start}] Agent reset complete")
+
+        scan_res = []
+        mode_args = ["complete", "no_var", "complete", "no_var"]
+        depth_args = [25, 25, 50, 50]
+
+        heuristic_fn = heuristics.compute_avg_action_time(myEnv, cfg_env, g_obs_keys, ga_keys)
+        for idx in range(0, len(mode_args)):
+            scan_res.append(heuristic_fn(copy.deepcopy(cfg), mode_args[idx], depth_args[idx]))
+            checkpoint = time.time()
+            print(f"[Time: {checkpoint-start}] Heuristic search for {mode_args[idx]} and d={depth_args[idx]} complete. Results: {scan_res}")
+
+        checkpoint = time.time()
+        print(f"[Time: {checkpoint-start}] Heuristic search complete. Results: {scan_res}")
         ################################################################
     except:
         finish = time.time()
