@@ -26,8 +26,6 @@ class ContinuousDisprod():
         self.step_size_var = cfg["disprod"]["step_size_var"]
         self.conv_thresh = cfg["disprod"]["convergance_threshold"]        
             
-        self.log_file = cfg["log_file"]
-
         self.bool_s_idx = jnp.array(cfg_env['bool_s_idx'], dtype=jnp.int32)
         self.bool_ga_idx = jnp.array(cfg_env['bool_ga_idx'], dtype=jnp.int32)
         self.real_ga_idx = jnp.array(cfg_env['real_ga_idx'], dtype=jnp.int32)

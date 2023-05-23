@@ -112,7 +112,7 @@ def main(env, inst, method_name=None, episodes=1):
         
         # projection_fn is for a row of actions. vmap here works on the depth axis.
         # Loading the executable function in cfg_env rather than cfg to prevent clash with wandb sweep
-        if args.env == "recsim":
+        if env.lower() == "recsim":
             n_consumer = len(rddl_model.objects["consumer"])
             n_item = len(rddl_model.objects["item"]) 
             cfg_env["disprod"] = {"projection_fn":jax.vmap(projection_fn(len(bool_ga_idx), n_consumer, n_item), in_axes=(0), out_axes=(0))}
@@ -158,7 +158,7 @@ def main(env, inst, method_name=None, episodes=1):
                     # action = agent.sample_action()
                     obs_array = np.array([state[i] for i in g_obs_keys])
                     # replace the following line of code with your agent call
-                    ac_array, k_idx, prev_ac_seq, prev_ac_seq = agent.choose_action(obs_array, prev_ac_seq, prev_ac_seq)
+                    ac_array, k_idx, prev_ac_seq, agent_key = agent.choose_action(obs_array, prev_ac_seq, agent_key)
                     action = {ga_keys[idx]: float(ac_array[idx]) for idx in k_idx}
 
 
