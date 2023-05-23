@@ -25,7 +25,7 @@ disprod:
   reward_fn_using_taylor: True
   max_grad_steps: 10
   # Modes: complete, no_var, sampling
-  taylor_expansion_mode: sampling
+  taylor_expansion_mode: no_var
   # Values: numeric, analytic
   sop: numeric
   convergance_threshold: 0.1

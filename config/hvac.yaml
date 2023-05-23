@@ -13,4 +13,4 @@ disprod:
   step_size: 0.01
   step_size_var: 0.001
   n_restarts: 200
-  taylor_expansion_mode: sampling
+  taylor_expansion_mode: no_var

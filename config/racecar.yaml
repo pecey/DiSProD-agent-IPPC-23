@@ -11,7 +11,7 @@ mppi:
   gamma: 1.0
 
 disprod:
-  taylor_expansion_mode: sampling
+  taylor_expansion_mode: no_var
   step_size: 0.001
   step_size_var: 0.0001
   n_restarts: 200
