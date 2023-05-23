@@ -6,13 +6,15 @@ import numpy as np
 from pyRDDLGym import RDDLEnv
 from pyRDDLGym import ExampleManager
 from pyRDDLGym.Policies.Agents import NoOpAgent
+import copy
+import multiprocessing as mp
 
 # for JAX backend:
 # from pyRDDLGym.Core.Jax.JaxRDDLSimulator import JaxRDDLSimulator
 
 ############################################################
 # IMPORT THE AGENT AND OTHER DEPENDENCIES OF YOUR SOLUTION #
-from utils import helpers
+from utils import helpers, heuristics
 from functools import partial
 from planners.disprod import ContinuousDisprod
 import jax
@@ -121,6 +123,23 @@ def main(env, inst, method_name=None, episodes=1):
 
         checkpoint=time.time()
         print(f"[Time: {checkpoint-start}] Loading the projection fn")
+
+        queue = mp.Queue()   
+        processes = []
+        scan_res = []
+        mode_args = ["complete", "no_var", "complete", "no_var"]
+        depth_args = [25, 25, 50, 50]
+
+        for idx in range(0, 4):
+            p = mp.Process(target=heuristics.compute_avg_action_time, args=(queue, myEnv, copy.deepcopy(cfg), cfg_env, g_obs_keys, ga_keys, mode_args[idx], depth_args[idx]))
+            p.start()
+            processes.append(p)
+    
+        for p in processes:
+            p.join()
+
+        while (not queue.empty()):
+            scan_res.append(queue.get())
 
         agent = ContinuousDisprod(cfg, cfg_env)
         checkpoint = time.time()
