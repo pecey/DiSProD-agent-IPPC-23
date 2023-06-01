@@ -3,19 +3,25 @@ import jax.numpy as jnp
 
 from functools import partial
 from planners.utils import adam_with_clipping, adam_with_projection
+from planners.helpers import ns_and_reward_partial
+from utils.common_utils import load_method
 import numpy as np
 from jax import random as jax_random
 import gym.spaces as spaces
 
+DISPROD_NOISE_VARS = ["disprod_eps_norm", "disprod_eps_uni"]
 
 class ContinuousDisprod():
-    def __init__(self, cfg, cfg_env={}):
+    def __init__(self, cfg, rddl_model, cfg_env={}):
 
-        ga_keys = cfg_env.get('ga_keys', [])
-        self.ac_lb, self.ac_ub = compute_ac_bounds(cfg_env["action_space"], ga_keys)
+        ga_keys = cfg_env['ga_keys']
+        s_keys = cfg_env["s_keys"]
+        a_keys = cfg_env["a_keys"]
+        ns_keys = cfg_env["ns_keys"]
+        s_gs_idx = cfg_env["s_gs_idx"]
+        a_ga_idx = cfg_env["a_ga_idx"]
+        self.n_output = cfg_env["n_concurrent_ac"]
         
-        ns_and_rew_fn = cfg_env.get('transition_fn')
-
         self.nA = cfg_env["nA"]
         self.nS = cfg_env["nS"]
         self.depth = cfg.get("depth")
@@ -30,9 +36,18 @@ class ContinuousDisprod():
         self.bool_ga_idx = jnp.array(cfg_env['bool_ga_idx'], dtype=jnp.int32)
         self.real_ga_idx = jnp.array(cfg_env['real_ga_idx'], dtype=jnp.int32)
 
+
+        # Setup action bounds
+        self.ac_lb, self.ac_ub = compute_ac_bounds(cfg_env["action_space"], ga_keys)
         # Multiplicative factor used to transform free_action variables to the legal range.
         self.scale_fac = self.ac_ub - self.ac_lb
         
+        # Partial function to initialize action distribution
+        self.ac_dist_init_fn = init_real_ac_dist(self.n_res, self.depth, self.nA, low_ac=0, high_ac=1, bool_ac_idx = self.bool_ga_idx)
+        
+        # Partial function to scale action distribution
+        self.ac_dist_trans_fn = trans_ac_dist(self.ac_lb, self.scale_fac)
+
         if cfg["disprod"]["choose_action_mean"]:
             self.ac_selector = lambda m,v,key: m
         else:
@@ -40,18 +55,13 @@ class ContinuousDisprod():
 
         # Support for normal, uniform, weibull and bernoulli.
         noise_dist = { "uni_mu"    : 0.5,
-                            "uni_var"   : 1/12,
-                            "norm_mu"   : 0,
-                            "norm_var"  : 1}
+                        "uni_var"   : 1/12,
+                        "norm_mu"   : 0,
+                        "norm_var"  : 1}
         self.n_noise = 2
 
-        
-        # Partial function to initialize action distribution
-        self.ac_dist_init_fn = init_real_ac_dist(self.n_res, self.depth, self.nA, low_ac=0, high_ac=1, bool_ac_idx = self.bool_ga_idx)
-        
-        # Partial function to scale action distribution
-        self.ac_dist_trans_fn = trans_ac_dist(self.ac_lb, self.scale_fac)
-        
+        # Setup transition and reward function
+        ns_and_rew_fn = ns_and_reward_partial(rddl_model, s_keys, a_keys, ns_keys, s_gs_idx, a_ga_idx)
         if cfg["disprod"]["taylor_expansion_mode"] == "complete":
             fop_fn = fop_analytic(ns_and_rew_fn)
             ns_and_rew_concat_fn = ns_and_rew_concat(ns_and_rew_fn)
@@ -68,22 +78,33 @@ class ContinuousDisprod():
             raise Exception(
                 f"Unknown value for config taylor_expansion_mode. Got {cfg['taylor_expansion_mode']}")
             
-        rollout_fn = rollout_graph(dist_fn)
-        q_fn = q(noise_dist, self.depth, rollout_fn)
-        self.batch_q_fn = jax.vmap(q_fn, in_axes=(0, 0, 0, None), out_axes=(0, None))
-        
-        self.batch_grad_q_fn = jax.vmap(grad_q(q_fn), in_axes=(0, 0, 0, None), out_axes=(0, 0))
+        self._setup_q_fn(noise_dist, dist_fn)
+        self._setup_projection(cfg, rddl_model, cfg_env)
 
-        projection = cfg_env["disprod"]["projection_fn"]
-        self.batch_projection = jax.vmap(projection, in_axes=(0), out_axes=(0))
-
-        self.n_output = cfg_env["n_concurrent_ac"]
 
         # Prewarm
         dummy_obs =  jnp.zeros(self.nS)
         dummy_key_1, dummy_key_2 = jax.random.split(jax.random.PRNGKey(0))
         dummy_ac_seq = jax.random.uniform(dummy_key_1, shape=(self.depth, self.nA))
         self.choose_action(dummy_obs, dummy_ac_seq, dummy_key_2)
+
+    def _setup_q_fn(self, noise_dist, dist_fn):
+        rollout_fn = rollout_graph(dist_fn)
+        q_fn = q(noise_dist, self.depth, rollout_fn)
+        self.batch_q_fn = jax.vmap(q_fn, in_axes=(0, 0, 0, None), out_axes=(0, None))
+        
+        self.batch_grad_q_fn = jax.vmap(grad_q(q_fn), in_axes=(0, 0, 0, None), out_axes=(0, 0))
+
+    def _setup_projection(self, cfg, rddl_model, cfg_env):
+        # projection_fn is for a row of actions. vmap here works on the depth axis.
+        projection_fn = load_method(cfg["disprod"]["projection_fn"])
+        if cfg["env_name"] == "recsim":
+            n_consumer = len(rddl_model.objects["consumer"])
+            n_item = len(rddl_model.objects["item"]) 
+            projection_fn = jax.vmap(projection_fn(len(cfg_env["bool_ga_idx"]), n_consumer, n_item), in_axes=(0), out_axes=(0))
+        else:
+            projection_fn = jax.vmap(projection_fn(len(cfg_env["bool_ga_idx"])), in_axes=(0), out_axes=(0))
+        self.batch_projection = jax.vmap(projection_fn, in_axes=(0), out_axes=(0))
 
     def reset(self, key):
         key_1, key_2 = jax.random.split(key)

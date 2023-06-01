@@ -1,11 +1,9 @@
-import jax
 import jax.numpy as jnp
 import re
 
 from pyRDDLGymHelper.Core.Parser import parser as Rddlparser
 from pyRDDLGymHelper.Core.Parser.RDDLReader import RDDLReader
 from pyRDDLGymHelper.Core.Compiler.RDDLLiftedModel import RDDLLiftedModel
-from pyRDDLGymHelper.Core.Jax import JaxRDDLCompiler, JaxRDDLBackpropPlanner
 
 EPS_STR = {"normal": "disprod_eps_norm",
            "uniform": "disprod_eps_uni",
@@ -14,34 +12,6 @@ EPS_STR = {"normal": "disprod_eps_norm",
 
 # Order of the list is important.
 DISPROD_NOISE_VARS = ["disprod_eps_norm", "disprod_eps_uni"]
-
-def ns_and_reward(cpfs, s_keys, a_keys, ns_keys, const_dict, levels, extra_params, reward_fn, s_gs_idx, a_ga_idx):
-    def _ns_and_reward(state, action, rng_key):
-        """
-        s_keys, a_keys: not grounded 
-        gs_keys, ga_keys: grounded
-        grounded_names: map s_keys -> gs_keys, a_keys -> ga_keys
-        state, action: grounded
-        """
-
-        # s_gs_idx and s_ga_idx have 4 values for each key.
-        # idx 0 and idx 1 are the min and max indexes for the key
-        # idx 3 is the desired shape.
-        state_dict = {k: jnp.array(state[s_gs_idx[k][0] : s_gs_idx[k][1]]).reshape(s_gs_idx[k][3]) for k in s_keys}
-        action_dict = {k: jnp.array(action[a_ga_idx[k][0] : a_ga_idx[k][1]]).reshape(a_ga_idx[k][3]) for k in a_keys}
-
-        # subs should be not grounded.
-        subs = {**state_dict, **action_dict, **const_dict}
-
-        for level in levels:
-            expr = cpfs[level]
-            subs[level], _, _ = expr(subs, extra_params, rng_key)
-            
-        reward, _, _ = reward_fn(subs, extra_params, rng_key)
-
-        # flatten is required in cases like RecSim where state variables are 2D
-        return jnp.hstack([subs[k].flatten() for k in ns_keys]), reward
-    return _ns_and_reward
 
 
 def prepare_index_mapping(keys, grounded_names, init_subs, noise_vars=False):
@@ -115,47 +85,18 @@ def gen_model(domain_path, instance_path, reparam = False):
     return model    
 
 def prepare_rddl_compilations(model): 
-    # To read from pyRDDLGym
-    # env_info = ExampleManager().GetEnvInfo(ENV)
-    # domain = env_info.get_domain()
-    # instance = env_info.get_instance(inst)
-
     a_keys = list(model.actions.keys())
     s_keys = list(model.states.keys())
 
     bool_s_idx = [idx for idx,key in enumerate(s_keys) if model.statesranges[key] == "bool"]
-    bool_a_idx = [idx for idx,key in enumerate(a_keys) if model.actionsranges[key] == "bool"]
     
     ground_a_keys = list(model.groundactions().keys())
     real_ga_idx = [idx for idx,key in enumerate(ground_a_keys) if model.groundactionsranges()[key] == "real"]
     bool_ga_idx = [idx for idx,key in enumerate(ground_a_keys) if model.groundactionsranges()[key] == "bool"]
 
-    # ns_mapping = model.next_state
-    # ns_keys = [ns_mapping[k] for k in s_keys if k not in ["disprod_epsilon"]]
     ns_keys = [f"{k}'" for k in s_keys if k not in DISPROD_NOISE_VARS]
 
-    compiled = JaxRDDLBackpropPlanner.JaxRDDLCompilerWithGrad(rddl=model)
-        
-    # compiled_expr_tree = compiled._compile_cpfs_into_exp_tree()
-    # for k,v in compiled_expr_tree.items():
-    #     print(f"Key: {k}, Expression: {v}")
-    
-    compiled.compile()
-        
-    # JaxRDDLCompiler turns this on causing a lot of logs on screen. 
-    jax.config.update('jax_log_compiles', False)
-
-
-    reward, cpfs = compiled.reward, compiled.cpfs
-    model_params = compiled.model_params
-    
-    # This decides the order of processing
-    levels = [_v for v in compiled.levels.values() for _v in v]  
-    
-    # compiled.init_values is a dict of values of constants and variables. Split it into two dicts
-    const_dict = {k:compiled.init_values[k] for k in compiled.rddl.nonfluents.keys()}
-
-    return reward, cpfs, const_dict, s_keys, list(a_keys), ground_a_keys, ns_keys, levels, model.grounded_names, model_params, bool_s_idx, bool_a_idx, bool_ga_idx, real_ga_idx
+    return s_keys, list(a_keys), ground_a_keys, ns_keys, bool_s_idx, bool_ga_idx, real_ga_idx
 
 def reparam_rddl(rddltxt):   
     # For arg1, match everything except a comma. For arg2, match everything except ) followed by at max one ). For patterns like (?p)
