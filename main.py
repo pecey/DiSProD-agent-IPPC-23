@@ -60,111 +60,110 @@ def main(env, inst, method_name=None, episodes=1):
 
     signal.setitimer(signal.ITIMER_REAL, init_budget)
     start = time.time()
-    try:
-        ################################################################
-        # Initialize your agent here:
+    # try:
+    ################################################################
+    # Initialize your agent here:
 
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        cfg = prepare_config("_".join(env.lower().split()), f"{current_dir}/config")
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    cfg = prepare_config("_".join(env.lower().split()), f"{current_dir}/config")
 
-        checkpoint = time.time()
-        print(f"[Time: {checkpoint-start}] Loading config from path {current_dir}/config")
+    checkpoint = time.time()
+    print(f"[Time: {checkpoint-start}] Loading config from path {current_dir}/config")
 
-        # Don't reparameterize the RDDL expressions if planner uses sampling
-        reparam_rddl = True if cfg["disprod"]["taylor_expansion_mode"] in ["complete", "no_var"] else False
-        domain_path = EnvInfo.get_domain()
-        instance_path = EnvInfo.get_instance(inst)
-        rddl_model = helpers.gen_model(domain_path, instance_path, reparam_rddl)
+    # Don't reparameterize the RDDL expressions if planner uses sampling
+    reparam_rddl = True if cfg["mode"] in ["complete", "no_var"] else False
+    domain_path = EnvInfo.get_domain()
+    instance_path = EnvInfo.get_instance(inst)
+    rddl_model = helpers.gen_model(domain_path, instance_path, reparam_rddl)
 
-        checkpoint = time.time()
-        print(f"[Time: {checkpoint-start}] Reparam RDDL set to {reparam_rddl}")
+    checkpoint = time.time()
+    print(f"[Time: {checkpoint-start}] Reparam RDDL set to {reparam_rddl}")
 
-        g_obs_keys = [key for key in rddl_model.groundstates().keys() if key not in DISPROD_NOISE_VARS]
+    g_obs_keys = [key for key in rddl_model.groundstates().keys() if key not in DISPROD_NOISE_VARS]
 
-        s_keys, a_keys, ga_keys, ns_keys, bool_s_idx, bool_ga_idx, real_ga_idx = helpers.prepare_rddl_compilations(rddl_model)
+    s_keys, a_keys, ga_keys, ns_keys, bool_s_idx, bool_ga_idx, real_ga_idx = helpers.prepare_rddl_compilations(rddl_model)
 
-        init_subs = myEnv.sampler.subs
+    init_subs = myEnv.sampler.subs
 
-        # obs_keys = state_keys - noise_keys. g_obs_keys = grounded version of obs_keys
-        obs_keys = [key for key in s_keys if key not in DISPROD_NOISE_VARS]
-        
-        # Map state/action to the indices capturing the grounded states/action in the transition function input vector
-        s_gs_idx = helpers.prepare_index_mapping(obs_keys, rddl_model.grounded_names, init_subs, noise_vars=True)
-        a_ga_idx = helpers.prepare_index_mapping(a_keys, rddl_model.grounded_names, init_subs, noise_vars=False)
+    # obs_keys = state_keys - noise_keys. g_obs_keys = grounded version of obs_keys
+    obs_keys = [key for key in s_keys if key not in DISPROD_NOISE_VARS]
+    
+    # Map state/action to the indices capturing the grounded states/action in the transition function input vector
+    s_gs_idx = helpers.prepare_index_mapping(obs_keys, rddl_model.grounded_names, init_subs, noise_vars=True)
+    a_ga_idx = helpers.prepare_index_mapping(a_keys, rddl_model.grounded_names, init_subs, noise_vars=False)
 
-        cfg_env = {}
-        cfg_env["s_keys"] = obs_keys + DISPROD_NOISE_VARS
-        cfg_env["a_keys"] = a_keys
-        cfg_env["ns_keys"] = ns_keys
-        cfg_env['ga_keys'] = ga_keys
-        cfg_env['bool_s_idx'] = bool_s_idx
-        cfg_env['bool_ga_idx'] = bool_ga_idx
-        cfg_env['real_ga_idx'] = real_ga_idx
-        cfg_env["action_space"] = myEnv.action_space
-        cfg_env["n_concurrent_ac"] = myEnv.numConcurrentActions
-        cfg_env["nA"] = len(myEnv.action_space)
-        cfg_env["nS"] = len(myEnv.observation_space)
-        cfg_env["s_gs_idx"] = s_gs_idx
-        cfg_env["a_ga_idx"] = a_ga_idx
+    cfg_env = {}
+    cfg_env["s_keys"] = obs_keys + DISPROD_NOISE_VARS
+    cfg_env["a_keys"] = a_keys
+    cfg_env["ns_keys"] = ns_keys
+    cfg_env['ga_keys'] = ga_keys
+    cfg_env['bool_s_idx'] = bool_s_idx
+    cfg_env['bool_ga_idx'] = bool_ga_idx
+    cfg_env['real_ga_idx'] = real_ga_idx
+    cfg_env["action_space"] = myEnv.action_space
+    cfg_env["n_concurrent_ac"] = myEnv.numConcurrentActions
+    cfg_env["nA"] = len(myEnv.action_space)
+    cfg_env["nS"] = len(myEnv.observation_space)
+    cfg_env["s_gs_idx"] = s_gs_idx
+    cfg_env["a_ga_idx"] = a_ga_idx
+    
+    checkpoint=time.time()
 
-        
-        checkpoint=time.time()
+    # Setup default agent.
+    agent = ContinuousDisprod(cfg, rddl_model, cfg_env)
+    agent_key = jax.random.PRNGKey(cfg["seed"])
+    prev_ac_seq, agent_key = agent.reset(agent_key)
+    checkpoint = time.time()
+    print(f"[Time: {checkpoint-start}] Basic agent initialized.")
 
-        # Setup default agent.
-        agent = ContinuousDisprod(cfg, rddl_model, cfg_env)
-        agent_key = jax.random.PRNGKey(cfg["seed"])
-        prev_ac_seq, agent_key = agent.reset(agent_key)
-        checkpoint = time.time()
-        print(f"[Time: {checkpoint-start}] Basic agent initialized.")
+    # Perform heuristic scans 
 
-        # Perform heuristic scans 
+    #################################################################
+    # H1: Compute the average time taken per mode
+    ##################################################################
+    combs = [("no_var", cfg["depth"]), ("sampling", cfg["depth"])]
+    scan_res = []
+    heuristic_fn = partial(heuristics.compute_avg_action_time, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys)
 
-        #################################################################
-        # H1: Compute the average time taken per mode
-        ##################################################################
-        combs = [("no_var", cfg["depth"]), ("sampling", cfg["depth"])]
-        scan_res = []
-        heuristic_fn = partial(heuristics.compute_avg_action_time, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys)
+    # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
+    context = mp.get_context("spawn")
+    with ProcessPoolExecutor(mp_context=context,max_workers=4) as executor:
+        jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, depth) for mode, depth in combs]
 
-        # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
-        context = mp.get_context("spawn")
-        with ProcessPoolExecutor(mp_context=context,max_workers=4) as executor:
-            jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, depth) for mode, depth in combs]
+        for job in as_completed(jobs):
+            result = job.result()
+            print(result)
+            scan_res.append(result)
 
-            for job in as_completed(jobs):
-                result = job.result()
-                print(result)
-                scan_res.append(result)
+    scan_res = sorted(scan_res, key=lambda x: (x[0], x[1]))
+    print(scan_res)
 
-        scan_res = sorted(scan_res, key=lambda x: (x[0], x[1]))
-        print(scan_res)
+    ##################################################################
+    # H2: Search across different LRs
+    #################################################################
 
-        ##################################################################
-        # H2: Search across different LRs
-        #################################################################
+    combs = [("no_var", 0.001), ("sampling", 0.1)]
+    scan_res = []
+    heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys, n_episodes=2)
 
-        combs = [("no_var", 0.001), ("sampling", 0.1)]
-        scan_res = []
-        heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys, n_episodes=2)
+    # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
+    context = mp.get_context("spawn")
+    with ProcessPoolExecutor(mp_context=context,max_workers=4) as executor:
+        jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, lr) for mode, lr in combs]
 
-        # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
-        context = mp.get_context("spawn")
-        with ProcessPoolExecutor(mp_context=context,max_workers=4) as executor:
-            jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, lr) for mode, lr in combs]
+        for job in as_completed(jobs):
+            result = job.result()
+            print(result)
+            scan_res.append(result)
 
-            for job in as_completed(jobs):
-                result = job.result()
-                print(result)
-                scan_res.append(result)
-
-        scan_res = sorted(scan_res, key=lambda x: (x[0], x[1]))
-        print(scan_res)
-        ################################################################
-    except:
-        finish = time.time()
-        print('Timed out! (', finish - start, ' seconds)')
-        print('This domain will continue exclusively with default actions!')
-        init_timed_out = True
+    scan_res = sorted(scan_res, key=lambda x: (x[0], x[1]))
+    print(scan_res)
+    ################################################################
+    # except:
+    #     finish = time.time()
+    #     print('Timed out! (', finish - start, ' seconds)')
+    #     print('This domain will continue exclusively with default actions!')
+    #     init_timed_out = True
 
     # signal.signal(signal.SIGALRM, signal_handler)
 

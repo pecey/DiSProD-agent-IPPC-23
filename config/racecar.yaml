@@ -1,17 +1,20 @@
 env_name: racecar-continuous
 max_episode_steps: 200
 depth: 100
-discrete: False
 
-cem:
-  n_samples: 200
+mode: no_var
 
-mppi:
-  n_samples: 200
-  gamma: 1.0
+complete:
+  step_size: 0.001
+  step_size_var: 0.0001
+  n_restarts: 200
 
-disprod:
-  taylor_expansion_mode: no_var
+sampling:
+  step_size: 0.001
+  step_size_var: 0.0001
+  n_restarts: 200
+
+no_var:
   step_size: 0.001
   step_size_var: 0.0001
   n_restarts: 200

@@ -1,9 +1,6 @@
 import jax.numpy as jnp
-from pyRDDLGymHelper.Core.Jax import JaxRDDLBackpropPlanner
 
-def ns_and_reward_partial(rddl_model, s_keys, a_keys, ns_keys, s_gs_idx, a_ga_idx):
-    jax_compiled_model = JaxRDDLBackpropPlanner.JaxRDDLCompilerWithGrad(rddl=rddl_model)
-    jax_compiled_model.compile()
+def ns_and_reward_partial(jax_compiled_model, s_keys, a_keys, ns_keys, s_gs_idx, a_ga_idx):
 
     reward_fn = jax_compiled_model.reward
     cpfs = jax_compiled_model.cpfs
@@ -11,7 +8,6 @@ def ns_and_reward_partial(rddl_model, s_keys, a_keys, ns_keys, s_gs_idx, a_ga_id
     levels = [_v for v in jax_compiled_model.levels.values() for _v in v]
     const_dict = {k:jax_compiled_model.init_values[k] for k in jax_compiled_model.rddl.nonfluents.keys()}
 
-    del rddl_model
     del jax_compiled_model
 
     def _ns_and_reward(state, action, rng_key):

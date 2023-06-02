@@ -1,16 +1,25 @@
 env_name: hvac
-depth: 50
-discrete: False
+depth: 20
 
-cem:
-  n_samples: 200
+logic: FuzzyLogic
+logic_kwargs: {weight: 10}
 
-mppi:
-  n_samples: 200
-  gamma: 1.0
+posinf: 5
+neginf: 0
 
-disprod:
-  step_size: 0.01
-  step_size_var: 0.001
+mode: no_var
+
+complete:
+  step_size: 10
+  step_size_var: 10
+  n_restarts: 2000
+
+no_var:
+  step_size: 0.5
+  step_size_var: 0
   n_restarts: 200
-  taylor_expansion_mode: no_var
+
+sampling:
+  step_size: 0.5
+  step_size_var: 0
+  n_restarts: 200

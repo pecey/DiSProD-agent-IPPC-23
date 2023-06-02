@@ -8,6 +8,8 @@ from utils.common_utils import load_method
 import numpy as np
 from jax import random as jax_random
 import gym.spaces as spaces
+from pyRDDLGymHelper.Core.Jax import JaxRDDLLogic, JaxRDDLBackpropPlanner
+
 
 DISPROD_NOISE_VARS = ["disprod_eps_norm", "disprod_eps_uni"]
 
@@ -26,16 +28,29 @@ class ContinuousDisprod():
         self.nS = cfg_env["nS"]
         self.depth = cfg.get("depth")
 
-        self.n_res = cfg["disprod"]["n_restarts"]
-        self.max_grad_steps = cfg["disprod"]["max_grad_steps"]
-        self.step_size = cfg["disprod"]["step_size"]
-        self.step_size_var = cfg["disprod"]["step_size_var"]
-        self.conv_thresh = cfg["disprod"]["convergance_threshold"]        
+        mode = cfg["mode"]
+        self.n_res = cfg[mode]["n_restarts"]
+        self.max_grad_steps = cfg[mode]["max_grad_steps"]
+        self.step_size = cfg[mode]["step_size"]
+        self.step_size_var = cfg[mode]["step_size_var"]
+        self.conv_thresh = cfg[mode]["convergance_threshold"]
             
         self.bool_s_idx = jnp.array(cfg_env['bool_s_idx'], dtype=jnp.int32)
         self.bool_ga_idx = jnp.array(cfg_env['bool_ga_idx'], dtype=jnp.int32)
         self.real_ga_idx = jnp.array(cfg_env['real_ga_idx'], dtype=jnp.int32)
 
+        tnorm = getattr(JaxRDDLLogic, cfg['tnorm'])(**cfg['tnorm_kwargs'])
+        fuzzy_logic = getattr(JaxRDDLLogic, cfg['logic'])(tnorm=tnorm, **cfg['logic_kwargs'])
+
+        jax_compiled_model = JaxRDDLBackpropPlanner.JaxRDDLCompilerWithGrad(rddl=rddl_model, logic=fuzzy_logic)
+        jax_compiled_model.compile()
+
+        noop_ac = {}
+        for k in jax_compiled_model.rddl.actions.keys():
+            noop_ac.update(jax_compiled_model.rddl.ground_values(k, jax_compiled_model.init_values[k]))
+        g_noop_ac = jnp.array([noop_ac[k] for k in ga_keys])
+
+        ns_and_rew_fn = ns_and_reward_partial(jax_compiled_model, s_keys, a_keys, ns_keys, s_gs_idx, a_ga_idx)
 
         # Setup action bounds
         self.ac_lb, self.ac_ub = compute_ac_bounds(cfg_env["action_space"], ga_keys)
@@ -43,12 +58,13 @@ class ContinuousDisprod():
         self.scale_fac = self.ac_ub - self.ac_lb
         
         # Partial function to initialize action distribution
-        self.ac_dist_init_fn = init_real_ac_dist(self.n_res, self.depth, self.nA, low_ac=0, high_ac=1, bool_ac_idx = self.bool_ga_idx)
+        noop_init = (g_noop_ac - self.ac_lb)/self.scale_fac
+        self.ac_dist_init_fn = init_real_ac_dist(self.n_res, self.depth, self.nA, noop_init, low_ac=0, high_ac=1, bool_ac_idx = self.bool_ga_idx)
         
         # Partial function to scale action distribution
         self.ac_dist_trans_fn = trans_ac_dist(self.ac_lb, self.scale_fac)
 
-        if cfg["disprod"]["choose_action_mean"]:
+        if cfg[mode]["choose_action_mean"]:
             self.ac_selector = lambda m,v,key: m
         else:
             self.ac_selector = lambda m,v,key: m + jnp.sqrt(v) * jax.random.normal(key, shape=(self.nA,)) 
@@ -59,28 +75,30 @@ class ContinuousDisprod():
                         "norm_mu"   : 0,
                         "norm_var"  : 1}
         self.n_noise = 2
+    
 
         # Setup transition and reward function
-        ns_and_rew_fn = ns_and_reward_partial(rddl_model, s_keys, a_keys, ns_keys, s_gs_idx, a_ga_idx)
-        if cfg["disprod"]["taylor_expansion_mode"] == "complete":
+        if mode == "complete":
             fop_fn = fop_analytic(ns_and_rew_fn)
             ns_and_rew_concat_fn = ns_and_rew_concat(ns_and_rew_fn)
-            if cfg["disprod"]["sop"] == "analytic":
+            if cfg[mode]["sop"] == "analytic":
                 sop_fn = sop_analytic(ns_and_rew_concat_fn)
             else:
                 sop_fn = sop_numerical(ns_and_rew_concat_fn, self.nS + self.n_noise, self.nA)
             dist_fn = dynamics_comp(ns_and_rew_fn, fop_fn, sop_fn, noise_dist, self.bool_s_idx, self.nS)
-        elif cfg["disprod"]["taylor_expansion_mode"] == "no_var":
+        elif mode == "no_var":
             dist_fn = dynamics_nv(ns_and_rew_fn, noise_dist)
-        elif cfg["disprod"]["taylor_expansion_mode"] == "sampling":
+        elif mode == "sampling":
             dist_fn = dynamics_sampling(ns_and_rew_fn, noise_dist)
         else:
             raise Exception(
-                f"Unknown value for config taylor_expansion_mode. Got {cfg['taylor_expansion_mode']}")
+                f"Unknown mode. Got {mode}")
             
         self._setup_q_fn(noise_dist, dist_fn)
         self._setup_projection(cfg, rddl_model, cfg_env)
 
+        del jax_compiled_model
+        del rddl_model
 
         # Prewarm
         dummy_obs =  jnp.zeros(self.nS)
@@ -97,7 +115,7 @@ class ContinuousDisprod():
 
     def _setup_projection(self, cfg, rddl_model, cfg_env):
         # projection_fn is for a row of actions. vmap here works on the depth axis.
-        projection_fn = load_method(cfg["disprod"]["projection_fn"])
+        projection_fn = load_method(cfg["projection_fn"])
         if cfg["env_name"] == "recsim":
             n_consumer = len(rddl_model.objects["consumer"])
             n_item = len(rddl_model.objects["item"]) 
@@ -241,10 +259,16 @@ class ContinuousDisprod():
 #########
 
 # actions ~ Uniform(0,1).
-def init_real_ac_dist(n_res, depth, nA, low_ac, high_ac, bool_ac_idx):
+def init_real_ac_dist(n_res, depth, nA, noop_init, low_ac, high_ac, bool_ac_idx):
     def _init_real_ac_dist(key, ac_seq):
         ac_mean = jax.random.uniform(key, shape=(n_res, depth, nA))
         ac_mean = ac_mean.at[0, : depth -1, :].set(ac_seq[1:, :])
+
+        # Have two extremes as a part of the search space
+        ac_mean = ac_mean.at[1, :, :].set(jnp.zeros((depth, nA)))
+        ac_mean = ac_mean.at[2, :, :].set(jnp.ones((depth, nA)))
+        # Set this to translate to no-op action
+        ac_mean = ac_mean.at[3, :, :].set(noop_init)
 
         lower_limit = jnp.abs(ac_mean - low_ac)
         higher_limit = jnp.abs(ac_mean - high_ac)

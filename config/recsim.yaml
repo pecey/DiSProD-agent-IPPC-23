@@ -1,0 +1,20 @@
+env_name: rec-sim
+depth: 25
+projection_fn: planners.projections:project_recsim
+
+mode: no_var
+
+complete:
+  step_size: 10
+  step_size_var: 1
+  n_restarts: 200
+
+sampling:
+  step_size: 10
+  step_size_var: 1
+  n_restarts: 200
+
+no_var:
+  step_size: 10
+  step_size_var: 1
+  n_restarts: 200

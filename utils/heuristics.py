@@ -10,7 +10,7 @@ def compute_avg_action_time(domain, instance, rddl_model, cfg_env, g_obs_keys, g
                             enforce_action_constraints=False,
                             debug=True)
     cfg["depth"] = depth
-    cfg["disprod"]["taylor_expansion_mode"] = mode
+    cfg["mode"] = mode
     agent = ContinuousDisprod(cfg, rddl_model, cfg_env)
     agent_key = jax.random.PRNGKey(cfg["seed"])
     prev_ac_seq, agent_key = agent.reset(agent_key)
@@ -36,9 +36,9 @@ def compute_score_stats(domain, instance, rddl_model, cfg_env, g_obs_keys, ga_ke
                             instance=instance,
                             enforce_action_constraints=False,
                             debug=True)
-    cfg["step_size"] = lr
-    cfg["step_size_var"] = lr/10
-    cfg["disprod"]["taylor_expansion_mode"] = mode
+    cfg[mode]["step_size"] = lr
+    cfg[mode]["step_size_var"] = lr/10
+    cfg["mode"] = mode
     agent = ContinuousDisprod(cfg, rddl_model, cfg_env)
     agent_key = jax.random.PRNGKey(cfg["seed"])
     prev_ac_seq, agent_key = agent.reset(agent_key)

@@ -40,26 +40,6 @@ def print_(x, path=None, flush=True):
         print(x, file=open(path, 'a'), flush=flush)
 
 
-# https://gist.github.com/botforge/64cbb71780e6208172bbf03cd9293553
-def save_frames_as_gif(frames, path='./', filename='gym_animation.gif', save_as_video=False):
-    # Mess with this to change frame size
-    plt.figure(figsize=(frames[0].shape[1] / 72.0, frames[0].shape[0] / 72.0), dpi=72)
-    patch = plt.imshow(frames[0])
-    plt.axis('off')
-
-    def animate(i):
-        patch.set_data(frames[i])
-
-    anim = animation.FuncAnimation(plt.gcf(), animate, frames=len(frames), interval=50)
-    anim.save(f"{path}/{filename}", writer='imagemagick', fps=60)
-    if save_as_video:
-        video_filename = filename.replace(".gif", ".mp4")
-        anim.save(f"{path}/{video_filename}", extra_args=['-vcodec', 'libx264'])
-    plt.close()
-    print(f"Saving GIF in {path}/{filename}, frames : {len(frames)}")
-    # plt.savefig(f"{path}{filename}_{idx}.png")
-
-
 # Seed the libraries
 def set_global_seeds(seed, env=None):
     onp.random.seed(seed)
@@ -98,22 +78,25 @@ def update_config_with_args(cfg, args, base_path):
     if args.__contains__("n_restarts") and getattr(args,"n_restarts") is not None:
         cfg["disprod"]["n_restarts"] = getattr(args, "n_restarts")
         
-    # Update n_samples in CEM/MPPI
-    if args.__contains__("n_samples") and getattr(args,"n_samples") is not None:
-        cfg[cfg["alg"]]["n_samples"] = getattr(args, "n_samples")
+    # First parse mode
+    mode = cfg["mode"]
+    
+    # Update n_restarts in our planner
+    if args.__contains__("n_restarts") and getattr(args,"n_restarts") is not None:
+        cfg[mode]["n_restarts"] = getattr(args, "n_restarts")
     
     # Update step-size in our planner        
     if args.__contains__("step_size") and getattr(args,"step_size") is not None:
-        cfg["disprod"]["step_size"] = getattr(args, "step_size")
+        cfg[mode]["step_size"] = getattr(args, "step_size")
         
     if args.__contains__("step_size_var") and getattr(args,"step_size_var") is not None:
-        cfg["disprod"]["step_size_var"] = getattr(args, "step_size_var")
-        
-    if args.__contains__("taylor_expansion_mode") and getattr(args,"taylor_expansion_mode") is not None:
-        cfg["disprod"]["taylor_expansion_mode"] = getattr(args, "taylor_expansion_mode")
+        cfg[mode]["step_size_var"] = getattr(args, "step_size_var")
         
     if args.__contains__("sop") and getattr(args,"sop") is not None:
-        cfg["disprod"]["sop"] = getattr(args, "sop")
+        cfg[mode]["sop"] = getattr(args, "sop")
+
+    if args.__contains__("opt") and getattr(args,"opt") is not None:
+        cfg[mode]["optimizer"] = getattr(args, "opt")
 
     # Boolean keys
     boolean_keys = ["render", "headless", "save_as_gif"]
@@ -125,19 +108,8 @@ def update_config_with_args(cfg, args, base_path):
     if args.__contains__("run_name") and getattr(args, "run_name"):
         cfg["run_name"] = args.run_name
     else:
-        #today = date.today().strftime('%y-%m-%d')
         today = int(time.time())
-        if cfg['alg'] == "disprod":
-            if cfg['disprod']['taylor_expansion_mode'] == "encap":
-                run_name = f"{today}-disprod-encap"
-            else:
-                run_name = f"{today}-disprod-{cfg['disprod']['taylor_expansion_mode']}-{cfg['disprod']['sop']}"
-        else:
-            run_name = f"{today}-cem"
-        # if cfg["mode"] is not None:
-        #     cfg["run_name"] = f"{today}_{cfg['mode']}_{int(time.time())}"
-        # else:
-        #     cfg["run_name"] = f"{today}_{int(time.time())}"
+        run_name = f"{today}-{mode}"
         cfg["run_name"] = run_name
 
     return cfg

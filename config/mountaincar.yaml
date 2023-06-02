@@ -1,0 +1,22 @@
+env_name: mountain-car
+depth: 100
+
+logic: FuzzyLogic
+logic_kwargs: {weight: 50}
+
+mode: no_var
+
+complete:
+  step_size: 0.1
+  step_size_var: 0.01
+  n_restarts: 200
+
+sampling:
+  step_size: 0.1
+  step_size_var: 0.01
+  n_restarts: 200
+
+no_var:
+  step_size: 0.1
+  step_size_var: 0.01
+  n_restarts: 200
