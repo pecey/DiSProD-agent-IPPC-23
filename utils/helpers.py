@@ -128,3 +128,32 @@ def reparam_rddl(rddltxt):
 
     #print(f"RDDL after noise injection: {rddltxt}")
     return rddltxt
+
+
+def prepare_cfg_env(myEnv, rddl_model):
+    g_obs_keys = [key for key in rddl_model.groundstates().keys() if key not in DISPROD_NOISE_VARS]
+    s_keys, a_keys, ga_keys, ns_keys, bool_s_idx, bool_ga_idx, real_ga_idx = prepare_rddl_compilations(rddl_model)
+    init_subs = myEnv.sampler.subs
+
+    # obs_keys = state_keys - noise_keys. g_obs_keys = grounded version of obs_keys
+    obs_keys = [key for key in s_keys if key not in DISPROD_NOISE_VARS]
+    
+    # Map state/action to the indices capturing the grounded states/action in the transition function input vector
+    s_gs_idx = prepare_index_mapping(obs_keys, rddl_model.grounded_names, init_subs, noise_vars=True)
+    a_ga_idx = prepare_index_mapping(a_keys, rddl_model.grounded_names, init_subs, noise_vars=False)
+
+    cfg_env = {}
+    cfg_env["s_keys"] = obs_keys + DISPROD_NOISE_VARS
+    cfg_env["a_keys"] = a_keys
+    cfg_env["ns_keys"] = ns_keys
+    cfg_env['ga_keys'] = ga_keys
+    cfg_env['bool_s_idx'] = bool_s_idx
+    cfg_env['bool_ga_idx'] = bool_ga_idx
+    cfg_env['real_ga_idx'] = real_ga_idx
+    cfg_env["action_space"] = myEnv.action_space
+    cfg_env["n_concurrent_ac"] = myEnv.numConcurrentActions
+    cfg_env["nA"] = len(myEnv.action_space)
+    cfg_env["nS"] = len(myEnv.observation_space)
+    cfg_env["s_gs_idx"] = s_gs_idx
+    cfg_env["a_ga_idx"] = a_ga_idx
+    return g_obs_keys,ga_keys,cfg_env

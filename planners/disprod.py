@@ -5,8 +5,6 @@ from functools import partial
 from planners.utils import adam_with_clipping, adam_with_projection
 from planners.helpers import ns_and_reward_partial
 from utils.common_utils import load_method
-import numpy as np
-from jax import random as jax_random
 import gym.spaces as spaces
 from pyRDDLGymHelper.Core.Jax import JaxRDDLLogic, JaxRDDLBackpropPlanner
 

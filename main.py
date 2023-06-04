@@ -71,55 +71,55 @@ def main(env, inst, method_name=None, episodes=1):
     print(f"[Time: {checkpoint-start}] Loading config from path {current_dir}/config")
 
     # Don't reparameterize the RDDL expressions if planner uses sampling
-    reparam_rddl = True if cfg["mode"] in ["complete", "no_var"] else False
+    #reparam_rddl = True if cfg["mode"] in ["complete", "no_var"] else False
     domain_path = EnvInfo.get_domain()
     instance_path = EnvInfo.get_instance(inst)
-    rddl_model = helpers.gen_model(domain_path, instance_path, reparam_rddl)
-
-    checkpoint = time.time()
-    print(f"[Time: {checkpoint-start}] Reparam RDDL set to {reparam_rddl}")
-
-    g_obs_keys = [key for key in rddl_model.groundstates().keys() if key not in DISPROD_NOISE_VARS]
-
-    s_keys, a_keys, ga_keys, ns_keys, bool_s_idx, bool_ga_idx, real_ga_idx = helpers.prepare_rddl_compilations(rddl_model)
-
-    init_subs = myEnv.sampler.subs
-
-    # obs_keys = state_keys - noise_keys. g_obs_keys = grounded version of obs_keys
-    obs_keys = [key for key in s_keys if key not in DISPROD_NOISE_VARS]
     
-    # Map state/action to the indices capturing the grounded states/action in the transition function input vector
-    s_gs_idx = helpers.prepare_index_mapping(obs_keys, rddl_model.grounded_names, init_subs, noise_vars=True)
-    a_ga_idx = helpers.prepare_index_mapping(a_keys, rddl_model.grounded_names, init_subs, noise_vars=False)
+    # Setup rddl_model for sampling mode, and reparam_rddl_model for NV and complete mode
+    rddl_model = helpers.gen_model(domain_path, instance_path, False)
+    reparam_rddl_model = helpers.gen_model(domain_path, instance_path, True)
 
-    cfg_env = {}
-    cfg_env["s_keys"] = obs_keys + DISPROD_NOISE_VARS
-    cfg_env["a_keys"] = a_keys
-    cfg_env["ns_keys"] = ns_keys
-    cfg_env['ga_keys'] = ga_keys
-    cfg_env['bool_s_idx'] = bool_s_idx
-    cfg_env['bool_ga_idx'] = bool_ga_idx
-    cfg_env['real_ga_idx'] = real_ga_idx
-    cfg_env["action_space"] = myEnv.action_space
-    cfg_env["n_concurrent_ac"] = myEnv.numConcurrentActions
-    cfg_env["nA"] = len(myEnv.action_space)
-    cfg_env["nS"] = len(myEnv.observation_space)
-    cfg_env["s_gs_idx"] = s_gs_idx
-    cfg_env["a_ga_idx"] = a_ga_idx
+    # Setup cfg_env for sampling mode and reparam_cfg_env for NV and complete mode
+    g_obs_keys, ga_keys, cfg_env = helpers.prepare_cfg_env(myEnv, rddl_model)
+    reparam_g_obs_keys, reparam_ga_keys, reparam_cfg_env = helpers.prepare_cfg_env(myEnv, reparam_rddl_model)
     
-    checkpoint=time.time()
-
-    # Setup default agent.
-    agent = ContinuousDisprod(cfg, rddl_model, cfg_env)
+    # Setup default agent depending on the default mode
+    agent_setup_start = time.time()
+    if cfg["mode"] == "sampling":
+        agent = ContinuousDisprod(cfg, rddl_model, cfg_env)
+    else:
+        agent = ContinuousDisprod(cfg, reparam_rddl_model, reparam_cfg_env)
+        
     agent_key = jax.random.PRNGKey(cfg["seed"])
     prev_ac_seq, agent_key = agent.reset(agent_key)
-    checkpoint = time.time()
-    print(f"[Time: {checkpoint-start}] Basic agent initialized.")
+    agent_setup_end = time.time()
+    print(f"[Time: {agent_setup_end-agent_setup_start}] Basic agent initialized.")
 
-    # Perform heuristic scans 
+    # Perform heuristic scans
+    
+    ##################################################################
+    # H1: Search across different modes and see which is better
+    #################################################################
+
+    combs = ["no_var", "sampling"]
+    scan_res = []
+    heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys, n_episodes=5)
+
+    # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
+    context = mp.get_context("spawn")
+    with ProcessPoolExecutor(mp_context=context) as executor:
+        jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode) for mode in combs]
+
+        for job in as_completed(jobs):
+            result = job.result()
+            scan_res.append(result)
+
+    scan_res = sorted(scan_res, key=lambda x: (x[0]))
+    
+    better_mode = scan_res[-1][1] 
 
     #################################################################
-    # H1: Compute the average time taken per mode
+    # H2: Compute the average time taken per mode
     ##################################################################
     combs = [("no_var", cfg["depth"]), ("sampling", cfg["depth"])]
     scan_res = []
@@ -127,7 +127,7 @@ def main(env, inst, method_name=None, episodes=1):
 
     # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
     context = mp.get_context("spawn")
-    with ProcessPoolExecutor(mp_context=context,max_workers=4) as executor:
+    with ProcessPoolExecutor(mp_context=context) as executor:
         jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, depth) for mode, depth in combs]
 
         for job in as_completed(jobs):
@@ -138,26 +138,7 @@ def main(env, inst, method_name=None, episodes=1):
     scan_res = sorted(scan_res, key=lambda x: (x[0], x[1]))
     print(scan_res)
 
-    ##################################################################
-    # H2: Search across different LRs
-    #################################################################
-
-    combs = [("no_var", 0.001), ("sampling", 0.1)]
-    scan_res = []
-    heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys, n_episodes=2)
-
-    # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
-    context = mp.get_context("spawn")
-    with ProcessPoolExecutor(mp_context=context,max_workers=4) as executor:
-        jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, lr) for mode, lr in combs]
-
-        for job in as_completed(jobs):
-            result = job.result()
-            print(result)
-            scan_res.append(result)
-
-    scan_res = sorted(scan_res, key=lambda x: (x[0], x[1]))
-    print(scan_res)
+    
     ################################################################
     # except:
     #     finish = time.time()
