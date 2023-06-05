@@ -122,13 +122,14 @@ class ContinuousDisprod():
 
     def _setup_projection(self, cfg, rddl_model, cfg_env):
         # projection_fn is for a row of actions. vmap here works on the depth axis.
-        projection_fn = load_method(cfg["projection_fn"])
-        if cfg["env_name"] == "recsim":
-            n_consumer = len(rddl_model.objects["consumer"])
-            n_item = len(rddl_model.objects["item"]) 
-            projection_fn = jax.vmap(projection_fn(len(cfg_env["bool_ga_idx"]), n_consumer, n_item), in_axes=(0), out_axes=(0))
-        else:
-            projection_fn = jax.vmap(projection_fn(len(cfg_env["bool_ga_idx"])), in_axes=(0), out_axes=(0))
+        # projection_fn = load_method(cfg["projection_fn"])
+        # if cfg["env_name"] == "recsim":
+        #     n_consumer = len(rddl_model.objects["consumer"])
+        #     n_item = len(rddl_model.objects["item"]) 
+        #     projection_fn = jax.vmap(projection_fn(len(cfg_env["bool_ga_idx"]), n_consumer, n_item), in_axes=(0), out_axes=(0))
+        # else:
+        #     projection_fn = jax.vmap(projection_fn(len(cfg_env["bool_ga_idx"])), in_axes=(0), out_axes=(0))
+        projection_fn = cfg_env["projection_fn"]
         self.batch_projection = jax.vmap(projection_fn, in_axes=(0), out_axes=(0))
 
     def reset(self, key):

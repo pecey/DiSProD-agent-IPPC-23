@@ -167,26 +167,22 @@ def prepare_cfg_env(env_name, myEnv, rddl_model, cfg):
         n_consumer = len(rddl_model.objects["consumer"])
         n_item = len(rddl_model.objects["item"]) 
         cfg_env["projection_fn"] = jax.vmap(partial(projection_fn, len(bool_ga_idx), n_consumer, n_item), in_axes=(0), out_axes=(0))
-        ac_dict_fn = prep_ac_dict_recsim(n_item)
+        ac_dict_fn = partial(prep_ac_dict_recsim, n_item)
     else:
         cfg_env["projection_fn"] = jax.vmap(partial(projection_fn, len(bool_ga_idx)), in_axes=(0), out_axes=(0))
         ga_keys_output_mapping = {idx: ((key, lambda x: float(x)) if idx in real_ga_idx else (key, lambda x: int(x)))  for idx, key in enumerate(ga_keys)}    
-        ac_dict_fn = prep_ac_dict(ga_keys_output_mapping)
+        ac_dict_fn = partial(prep_ac_dict, ga_keys_output_mapping)
     
 
     return g_obs_keys,ga_keys,ac_dict_fn,cfg_env
 
-def prep_ac_dict(ga_keys_output_mapping):
-    def _prep_ac_dict(ac_array, k_idx):
-        action = {ga_keys_output_mapping[int(idx)][0]: ga_keys_output_mapping[int(idx)][1](ac_array[idx]) for idx in k_idx}
-        return action
-    return _prep_ac_dict
+def prep_ac_dict(ga_keys_output_mapping, ac_array, k_idx):
+    action = {ga_keys_output_mapping[int(idx)][0]: ga_keys_output_mapping[int(idx)][1](ac_array[idx]) for idx in k_idx}
+    return action
 
-def prep_ac_dict_recsim(n_item):
-    def _prep_ac_dict_recsim(ac_array, k_idx):
-        best_ac = np.argmax(ac_array)
-        con = int(best_ac/n_item)
-        item = best_ac - (n_item * con)
-        action = {f"recommend___c{con+1}__i{item+1}": 1}
-        return action
-    return _prep_ac_dict_recsim    
+def prep_ac_dict_recsim(n_item, ac_array, k_idx):
+    best_ac = np.argmax(ac_array)
+    con = int(best_ac/n_item)
+    item = best_ac - (n_item * con)
+    action = {f"recommend___c{con+1}__i{item+1}": 1}
+    return action
