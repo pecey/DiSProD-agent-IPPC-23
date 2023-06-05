@@ -27,7 +27,7 @@ class ContinuousDisprod():
         self.depth = cfg.get("depth")
 
         mode = cfg["mode"]
-        self.n_res = cfg[mode]["n_restarts"]
+        self.n_res_lr = cfg[mode]["n_restarts"]
         self.max_grad_steps = cfg[mode]["max_grad_steps"]
         self.step_size = cfg[mode]["step_size"]
         self.step_size_var = cfg[mode]["step_size_var"]
@@ -51,13 +51,15 @@ class ContinuousDisprod():
         ns_and_rew_fn = ns_and_reward_partial(jax_compiled_model, s_keys, a_keys, ns_keys, s_gs_idx, a_ga_idx)
 
         # Setup action bounds
-        self.ac_lb, self.ac_ub = compute_ac_bounds(cfg_env["action_space"], ga_keys)
+        ac_bounds_user = cfg[mode].get("action_bounds", {})
+        overwrite_ac_bounds = cfg["overwrite_ac_bounds"]
+        self.ac_lb, self.ac_ub = compute_ac_bounds(cfg_env["action_space"], ga_keys, overwrite_ac_bounds, ac_bounds_user, cfg["posinf"], cfg["neginf"])
         # Multiplicative factor used to transform free_action variables to the legal range.
         self.scale_fac = self.ac_ub - self.ac_lb
         
         # Partial function to initialize action distribution
         noop_init = (g_noop_ac - self.ac_lb)/self.scale_fac
-        self.ac_dist_init_fn = init_real_ac_dist(self.n_res, self.depth, self.nA, noop_init, low_ac=0, high_ac=1, bool_ac_idx = self.bool_ga_idx)
+        self.ac_dist_init_fn = init_real_ac_dist(self.n_res_lr, self.depth, self.nA, noop_init, low_ac=0, high_ac=1, bool_ac_idx = self.bool_ga_idx)
         
         # Partial function to scale action distribution
         self.ac_dist_trans_fn = trans_ac_dist(self.ac_lb, self.scale_fac)
@@ -98,11 +100,18 @@ class ContinuousDisprod():
         del jax_compiled_model
         del rddl_model
 
-        # Prewarm
-        dummy_obs =  jnp.zeros(self.nS)
+        
+    def pre_warm(self, dummy_obs):
+        # dummy_obs =  jnp.zeros(self.nS)
         dummy_key_1, dummy_key_2 = jax.random.split(jax.random.PRNGKey(0))
         dummy_ac_seq = jax.random.uniform(dummy_key_1, shape=(self.depth, self.nA))
-        self.choose_action(dummy_obs, dummy_ac_seq, dummy_key_2)
+        dummy_lrs_to_scan = jnp.ones((3, self.nA))
+        _, _, _, _, grad_mean = self.choose_action(dummy_obs, dummy_ac_seq, dummy_key_2, dummy_lrs_to_scan)
+        __lr = 1/jnp.mean(jnp.abs(grad_mean), axis=0)
+        for i in range(self.nA):
+            while __lr[i] > self.ac_ub[i]:
+                __lr = __lr.at[i].set(__lr[i]/10)
+        return jnp.array([__lr*10, __lr, __lr/10])
 
     def _setup_q_fn(self, noise_dist, dist_fn):
         rollout_fn = rollout_graph(dist_fn)
@@ -128,11 +137,14 @@ class ContinuousDisprod():
         return ac_seq, key_2
 
     @partial(jax.jit, static_argnums=(0,))
-    def choose_action(self, obs, prev_ac_seq, key):
+    def choose_action(self, obs, prev_ac_seq, key, lrs_to_scan):
         ac_seq = prev_ac_seq
 
+        lr_matrix = setup_lr_matrix(lrs_to_scan, self.n_res_lr, self.depth)
+        n_res = lr_matrix.shape[0]
+
         # Create a vector of obs corresponding to n_restarts
-        state = jnp.tile(obs, (self.n_res, 1)).astype('float32')
+        state = jnp.tile(obs, (n_res, 1)).astype('float32')
 
         # key: returned
         # subkey1: for action distribution initialization
@@ -142,7 +154,7 @@ class ContinuousDisprod():
         key, subkey1, subkey2, subkey3, subkey4 = jax.random.split(key, 5)
 
         # Initialize the action distribution. Shape: (n_res, depth, nA)
-        ac_mean, ac_var = self.ac_dist_init_fn(subkey1, ac_seq)
+        ac_mean, ac_var = self.ac_dist_init_fn(subkey1, ac_seq, len(lrs_to_scan))
 
         # Optimizer for continuous action variables - mean and variance
         opt_init_mean, opt_update_mean, get_params_mean = adam_with_clipping(self.step_size)
@@ -162,7 +174,7 @@ class ContinuousDisprod():
             """
             Update loop for all the restarts.
             """
-            ac_mu_init, ac_var_init, n_grad_steps, has_converged, state, opt_state_mean, opt_state_var, opt_state_bin, tmp, _key = val
+            ac_mu_init, ac_var_init, n_grad_steps, has_converged, state, opt_state_mean, opt_state_var, opt_state_bin, grad_mean_stats, _key = val
 
             # Scale action means and variance from (0,1) to permissible action ranges
             scaled_ac_mu, scaled_ac_var = self.ac_dist_trans_fn(ac_mu_init, ac_var_init)
@@ -199,7 +211,7 @@ class ContinuousDisprod():
             updated_reward, _subkey2 = self.batch_q_fn(state, scaled_ac_mu_upd, scaled_ac_var_upd, _subkey1)
 
             # Reset the restarts in which updates led to a poor reward
-            restarts_to_reset = jnp.where(updated_reward < reward, jnp.ones(self.n_res, dtype=jnp.int32), jnp.zeros(self.n_res, dtype=jnp.int32))
+            restarts_to_reset = jnp.where(updated_reward < reward, jnp.ones(n_res, dtype=jnp.int32), jnp.zeros(n_res, dtype=jnp.int32))
             mask = jnp.tile(restarts_to_reset, (self.depth, self.nA, 1)).transpose(2, 0, 1)
             ac_mu = ac_mu_init * mask + ac_mu_upd * (1-mask)
             ac_var = ac_var_init * mask + ac_var_upd * (1-mask)
@@ -211,7 +223,9 @@ class ContinuousDisprod():
             # Check for convergence
             has_converged = jnp.logical_and(jnp.max(jnp.abs(ac_mu_eps)) < self.conv_thresh, jnp.max(jnp.abs(ac_var_eps)) < self.conv_thresh/10)
 
-            return ac_mu, ac_var, n_grad_steps + 1, has_converged, state, opt_state_mean, opt_state_var, opt_state_bin, tmp.at[n_grad_steps].set(jnp.sum(restarts_to_reset)), _subkey2
+            grad_mean_stats = grad_mean_stats.at[n_grad_steps].set(jnp.mean(jnp.abs(grad_mean), axis=0))
+
+            return ac_mu, ac_var, n_grad_steps + 1, has_converged, state, opt_state_mean, opt_state_var, opt_state_bin, grad_mean_stats, _subkey2
 
         def _check_conv(val):
             _, _, n_grad_steps, has_converged, _, _, _, _, _, _ = val
@@ -219,13 +233,11 @@ class ContinuousDisprod():
 
         # Iterate until max_grad_steps reached or both means and variance has not converged
 
-        init_val = (ac_mean, ac_var, n_grad_steps, has_converged, state, opt_state_mean, opt_state_var, opt_state_bin, jnp.zeros((self.max_grad_steps,)), subkey4)        
-        ac_mean, ac_var, n_grad_steps, _, _, _, _,_, tmp, subkey5 = jax.lax.while_loop(_check_conv, _update_ac, init_val)
+        grad_mean_stats_ = jnp.zeros((self.max_grad_steps, self.depth, self.nA))
+        init_val = (ac_mean, ac_var, n_grad_steps, has_converged, state, opt_state_mean, opt_state_var, opt_state_bin, grad_mean_stats_, subkey4)        
+        ac_mean, ac_var, n_grad_steps, _, _, _, _,_, grad_mean_stats, subkey5 = jax.lax.while_loop(_check_conv, _update_ac, init_val)
 
         scaled_ac_mean, scaled_ac_var = self.ac_dist_trans_fn(ac_mean, ac_var)
-
-        # if self.debug:
-        #       print(f"Gradients steps taken: {n_grad_steps}. Resets per step: {tmp}")
 
         q_value, _ = self.batch_q_fn(state, scaled_ac_mean, scaled_ac_var, subkey5)
 
@@ -237,7 +249,7 @@ class ContinuousDisprod():
         
         _, k_idx = jax.lax.top_k(ac, self.n_output)
         
-        return ac, k_idx, ac_seq, key
+        return ac, k_idx, ac_seq, key, jnp.mean(jnp.abs(grad_mean_stats), axis=0)
 
 
 
@@ -258,7 +270,7 @@ class ContinuousDisprod():
 
 # actions ~ Uniform(0,1).
 def init_real_ac_dist(n_res, depth, nA, noop_init, low_ac, high_ac, bool_ac_idx):
-    def _init_real_ac_dist(key, ac_seq):
+    def _init_real_ac_dist(key, ac_seq, n_repeats):
         ac_mean = jax.random.uniform(key, shape=(n_res, depth, nA))
         ac_mean = ac_mean.at[0, : depth -1, :].set(ac_seq[1:, :])
 
@@ -273,6 +285,10 @@ def init_real_ac_dist(n_res, depth, nA, noop_init, low_ac, high_ac, bool_ac_idx)
         closer_limit = jnp.minimum(lower_limit, higher_limit)
         ac_var = jnp.square(2 * closer_limit) / 12
         ac_var = ac_var.at[bool_ac_idx].set(ac_mean[bool_ac_idx] * (1-ac_mean[bool_ac_idx]))
+
+        # Repeat along the restart dimension but not along depth and nA
+        ac_mean = jnp.tile(ac_mean, (n_repeats, 1, 1))
+        ac_var = jnp.tile(ac_var, (n_repeats, 1, 1))
         return ac_mean, ac_var
     return _init_real_ac_dist
 
@@ -468,15 +484,25 @@ def sop_numerical(ns_and_rew_concat, nS, nA):
         return sop_s, sop_a
     return _sop_numerical
 
-def compute_ac_bounds(ac_space, a_keys, posinf=100, neginf=-100):
+def compute_ac_bounds(ac_space, a_keys, overwrite_ac_bounds, ac_bounds_user, posinf=100, neginf=-100):
     ac_lb, ac_ub = [], []
     for a in a_keys:
         ac_obj = ac_space[a]
-        if type(ac_obj) == spaces.discrete.Discrete:
-            ac_lb.append(ac_obj.start)
-            ac_ub.append(ac_obj.start + ac_obj.n - 1)
+        if overwrite_ac_bounds:
+            _bounds = ac_bounds_user[a.split("__")[0].strip()]
+            ac_lb.append(_bounds[0])
+            ac_ub.append(_bounds[1])
         else:
-            ac_lb.append(ac_obj.low[0])
-            ac_ub.append(ac_obj.high[0])
+            if type(ac_obj) == spaces.discrete.Discrete:
+                ac_lb.append(ac_obj.start)
+                ac_ub.append(ac_obj.start + ac_obj.n - 1)
+            else:
+                ac_lb.append(ac_obj.low[0])
+                ac_ub.append(ac_obj.high[0])
     return jnp.nan_to_num(jnp.array(ac_lb, dtype=jnp.float32), posinf=posinf, neginf=neginf), jnp.nan_to_num(jnp.array(ac_ub, dtype=jnp.float32), posinf=posinf, neginf=neginf)
-    
+
+def setup_lr_matrix(lr_arr, n_res_lr, depth):
+    lr_matrix = jnp.vstack([jnp.tile(lr_arr[0], ((n_res_lr, depth, 1))),
+                            jnp.tile(lr_arr[1], ((n_res_lr, depth, 1))),
+                            jnp.tile(lr_arr[2], ((n_res_lr, depth, 1)))])
+    return lr_matrix

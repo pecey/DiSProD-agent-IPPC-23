@@ -2,7 +2,7 @@ env_name: mountain-car
 depth: 100
 
 logic: FuzzyLogic
-logic_kwargs: {weight: 50}
+logic_kwargs: {weight: 5}
 
 mode: no_var
 

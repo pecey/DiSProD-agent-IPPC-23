@@ -1,9 +1,12 @@
 import jax.numpy as jnp
+import jax
 import re
-
+import numpy as np
 from pyRDDLGymHelper.Core.Parser import parser as Rddlparser
 from pyRDDLGymHelper.Core.Parser.RDDLReader import RDDLReader
 from pyRDDLGymHelper.Core.Compiler.RDDLLiftedModel import RDDLLiftedModel
+
+from utils.common_utils import load_method
 
 EPS_STR = {"normal": "disprod_eps_norm",
            "uniform": "disprod_eps_uni",
@@ -130,7 +133,7 @@ def reparam_rddl(rddltxt):
     return rddltxt
 
 
-def prepare_cfg_env(myEnv, rddl_model):
+def prepare_cfg_env(env_name, myEnv, rddl_model, cfg):
     g_obs_keys = [key for key in rddl_model.groundstates().keys() if key not in DISPROD_NOISE_VARS]
     s_keys, a_keys, ga_keys, ns_keys, bool_s_idx, bool_ga_idx, real_ga_idx = prepare_rddl_compilations(rddl_model)
     init_subs = myEnv.sampler.subs
@@ -156,4 +159,33 @@ def prepare_cfg_env(myEnv, rddl_model):
     cfg_env["nS"] = len(myEnv.observation_space)
     cfg_env["s_gs_idx"] = s_gs_idx
     cfg_env["a_ga_idx"] = a_ga_idx
-    return g_obs_keys,ga_keys,cfg_env
+    
+    projection_fn = load_method(cfg["projection_fn"])
+    
+    if "recsim" in env_name.lower():
+        n_consumer = len(rddl_model.objects["consumer"])
+        n_item = len(rddl_model.objects["item"]) 
+        cfg_env["projection_fn"] = jax.vmap(projection_fn(len(bool_ga_idx), n_consumer, n_item), in_axes=(0), out_axes=(0))
+        ac_dict_fn = prep_ac_dict_recsim(n_item)
+    else:
+        cfg_env["projection_fn"] = jax.vmap(projection_fn(len(bool_ga_idx)), in_axes=(0), out_axes=(0))
+        ga_keys_output_mapping = {idx: ((key, lambda x: float(x)) if idx in real_ga_idx else (key, lambda x: int(x)))  for idx, key in enumerate(ga_keys)}    
+        ac_dict_fn = prep_ac_dict(ga_keys_output_mapping)
+    
+
+    return g_obs_keys,ga_keys,ac_dict_fn,cfg_env
+
+def prep_ac_dict(ga_keys_output_mapping):
+    def _prep_ac_dict(ac_array, k_idx):
+        action = {ga_keys_output_mapping[int(idx)][0]: ga_keys_output_mapping[int(idx)][1](ac_array[idx]) for idx in k_idx}
+        return action
+    return _prep_ac_dict
+
+def prep_ac_dict_recsim(n_item):
+    def _prep_ac_dict_recsim(ac_array, k_idx):
+        best_ac = np.argmax(ac_array)
+        con = int(best_ac/n_item)
+        item = best_ac - (n_item * con)
+        action = {f"recommend___c{con+1}__i{item+1}": 1}
+        return action
+    return _prep_ac_dict_recsim    

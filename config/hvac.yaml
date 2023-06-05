@@ -1,25 +1,27 @@
 env_name: hvac
-depth: 20
+depth: 100
 
 logic: FuzzyLogic
-logic_kwargs: {weight: 10}
+logic_kwargs: {weight: 5}
 
-posinf: 5
-neginf: 0
+posinf: 15
+neginf: -15
 
 mode: no_var
 
 complete:
   step_size: 10
   step_size_var: 10
-  n_restarts: 2000
+  n_restarts: 200
 
 no_var:
   step_size: 0.5
   step_size_var: 0
-  n_restarts: 200
+  n_restarts: 400
+  lrs_to_scan: [0.001, 0.01, 1]
 
 sampling:
   step_size: 0.5
   step_size_var: 0
-  n_restarts: 200
+  n_restarts: 400
+  lrs_to_scan: [0.001, 0.01, 1]
