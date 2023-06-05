@@ -74,7 +74,7 @@ def main(env, inst, method_name=None, episodes=1):
         cfg = prepare_config("_".join(env.lower().split()), f"{current_dir}/config")
 
         checkpoint = time.time()
-        print(f"[Time left: {checkpoint-start}] Loading config from path {current_dir}/config")
+        print(f"[Time left: {init_budget - (checkpoint-start)}] Loading config from path {current_dir}/config")
 
         # Don't reparameterize the RDDL expressions if planner uses sampling
         domain_path = EnvInfo.get_domain()
@@ -106,7 +106,7 @@ def main(env, inst, method_name=None, episodes=1):
         agent_setup_end = time.time()
 
         time_required_for_agent_setup = agent_setup_end-agent_setup_start
-        print(f"[Time left: {agent_setup_end - start}] Basic agent initialized. Time taken: {time_required_for_agent_setup}")
+        print(f"[Time left: {init_budget - (agent_setup_end - start)}] Basic agent initialized. Time taken: {time_required_for_agent_setup}")
 
         # Perform heuristic scans
         
@@ -132,7 +132,7 @@ def main(env, inst, method_name=None, episodes=1):
         
         better_mode, better_weight = scan_res[-1][1:] 
         checkpoint = time.time()
-        print(f"[Time left: {checkpoint - start}] Heuristic scan complete.")
+        print(f"[Time left: {init_budget - (checkpoint - start)}] Heuristic scan complete.")
 
         if better_mode != cfg["mode"] or better_weight != cfg["logic_kwargs"]["weight"]:
             cfg["mode"] = better_mode
@@ -146,7 +146,7 @@ def main(env, inst, method_name=None, episodes=1):
             agent = new_agent
             lrs_to_scan = new_lrs_to_scan
             checkpoint = time.time()
-            print(f"[Time left: {checkpoint - start}] Found better config during scan. New agent initialized.")
+            print(f"[Time left: {init_budget - (checkpoint - start)}] Found better config during scan. New agent initialized.")
         
 
         # #################################################################
