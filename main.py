@@ -8,6 +8,7 @@ from pyRDDLGym import ExampleManager
 from pyRDDLGym.Policies.Agents import NoOpAgent
 import copy
 from functools import partial
+from gym.spaces import Dict, Box
 
 # for JAX backend:
 # from pyRDDLGym.Core.Jax.JaxRDDLSimulator import JaxRDDLSimulator
@@ -88,7 +89,28 @@ def main(env, inst, method_name=None, episodes=1):
         # TODO: Check if reparam_obs and reparam_a keys are different than normal?
         g_obs_keys, ga_keys, ac_dict_fn, cfg_env = helpers.prepare_cfg_env(env, myEnv, rddl_model, cfg)
         _, _, _, reparam_cfg_env = helpers.prepare_cfg_env(env, myEnv, reparam_rddl_model, cfg)
+                
+        # For large RecSim instances
+        fallback = True if cfg_env["nA"] > 500 else False
+        heuristic_scan = False if fallback else True
         
+        if fallback and cfg["env_name"] == "recsim":
+            n_consumer = len(rddl_model.objects["consumer"])
+            n_item = len(rddl_model.objects["item"]) 
+            cfg_env["nA"] = n_consumer
+            cfg_env["action_space"] = Dict()
+            for i in range(n_consumer):
+                cfg_env["action_space"][f"recommend__{i+1}"] = Box(low = 0, high = n_item - 1, dtype=np.float32)
+            cfg_env['ga_keys'] = [f"recommend__{i+1}" for i in range(n_consumer)]
+            cfg_env['bool_ga_idx'] = []
+            cfg_env['real_ga_idx'] = np.arange(0, n_consumer).tolist()
+            cfg_env["noop_ac"] = [0.0 for i in range(n_consumer)]
+            cfg["projection_fn"] = "planners.projections:project_dummy"
+            cfg[cfg["mode"]]["restarts"]=2000
+            cfg[cfg["mode"]]["overwrite_lrs"] = True
+            cfg[cfg["mode"]]["lrs_to_scan"] = [0 for _ in range(n_consumer)]
+            ac_dict_fn = partial(helpers.prep_ac_dict_recsim_fallback, n_consumer, n_item)
+            
         # Get a dummy obs
         dummy_state = myEnv.reset()
         dummy_obs = np.array([dummy_state[i] for i in g_obs_keys])
@@ -108,45 +130,44 @@ def main(env, inst, method_name=None, episodes=1):
         time_required_for_agent_setup = agent_setup_end-agent_setup_start
         print(f"[Time left: {init_budget - (agent_setup_end - start)}] Basic agent initialized. Time taken: {time_required_for_agent_setup}")
 
-        # Perform heuristic scans
-        
+        # Perform heuristic scans       
         ##################################################################
         # H1: Search across different modes and see which is better
         ##################################################################
+        if heuristic_scan:
+            combs = [("no_var", 1), ("no_var", 3), ("no_var", 5), ("no_var", 10),
+                    ("sampling", 1), ("sampling", 3), ("sampling", 5), ("sampling", 10)]
+            scan_res = []
+            heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys, ac_dict_fn, n_episodes=5)
 
-        combs = [("no_var", 1), ("no_var", 3), ("no_var", 5), ("no_var", 10),
-                 ("sampling", 1), ("sampling", 3), ("sampling", 5), ("sampling", 10)]
-        scan_res = []
-        heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys, ac_dict_fn, n_episodes=5)
+            # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
+            context = mp.get_context("spawn")
+            with ProcessPoolExecutor(mp_context=context) as executor:
+                jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, s_weight) for (mode, s_weight) in combs]
 
-        # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
-        context = mp.get_context("spawn")
-        with ProcessPoolExecutor(mp_context=context) as executor:
-            jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, s_weight) for (mode, s_weight) in combs]
+                for job in as_completed(jobs):
+                    result = job.result()
+                    scan_res.append(result)
 
-            for job in as_completed(jobs):
-                result = job.result()
-                scan_res.append(result)
-
-        scan_res = sorted(scan_res, key=lambda x: (x[0]))
-        
-        better_mode, better_weight = scan_res[-1][1], scan_res[-1][2] 
-        checkpoint = time.time()
-        print(f"[Time left: {init_budget - (checkpoint - start)}] Heuristic scan complete.")
-
-        if better_mode != cfg["mode"] or better_weight != cfg["logic_kwargs"]["weight"]:
-            cfg["mode"] = better_mode
-            cfg["logic_kwargs"]["weight"] = better_weight
-            if cfg["mode"] == "sampling":
-                new_agent = ContinuousDisprod(cfg, rddl_model, cfg_env)
-                new_lrs_to_scan = agent.pre_warm(dummy_obs)
-            else:
-                new_agent = ContinuousDisprod(cfg, reparam_rddl_model, reparam_cfg_env)
-                new_lrs_to_scan = agent.pre_warm(dummy_obs)
-            agent = new_agent
-            lrs_to_scan = new_lrs_to_scan
+            scan_res = sorted(scan_res, key=lambda x: (x[0]))
+            
+            better_mode, better_weight = scan_res[-1][1], scan_res[-1][2] 
             checkpoint = time.time()
-            print(f"[Time left: {init_budget - (checkpoint - start)}] Found better config during scan. New agent initialized.")
+            print(f"[Time left: {init_budget - (checkpoint - start)}] Heuristic scan complete.")
+
+            if better_mode != cfg["mode"] or better_weight != cfg["logic_kwargs"]["weight"]:
+                cfg["mode"] = better_mode
+                cfg["logic_kwargs"]["weight"] = better_weight
+                if cfg["mode"] == "sampling":
+                    new_agent = ContinuousDisprod(cfg, rddl_model, cfg_env)
+                    new_lrs_to_scan = agent.pre_warm(dummy_obs)
+                else:
+                    new_agent = ContinuousDisprod(cfg, reparam_rddl_model, reparam_cfg_env)
+                    new_lrs_to_scan = agent.pre_warm(dummy_obs)
+                agent = new_agent
+                lrs_to_scan = new_lrs_to_scan
+                checkpoint = time.time()
+                print(f"[Time left: {init_budget - (checkpoint - start)}] Found better config during scan. New agent initialized.")
         
 
         # #################################################################
@@ -237,13 +258,13 @@ def main(env, inst, method_name=None, episodes=1):
             if done:
                 break
 
-            print(f'episode {episode+1} ended with reward {total_reward} after {budget-elapsed} seconds')
+        print(f'episode {episode+1} ended with reward {total_reward} after {budget-elapsed} seconds')
     ########################################################################################
-            agg_rewards.append(total_reward)
+        agg_rewards.append(total_reward)
         
-        rewards_mean = np.mean(agg_rewards)
-        rewards_std = np.std(agg_rewards)
-        print(f"Mean: {rewards_mean}, SD: {rewards_std}, Rewards: {agg_rewards}")
+    rewards_mean = np.mean(agg_rewards)
+    rewards_std = np.std(agg_rewards)
+    print(f"Mean: {rewards_mean}, SD: {rewards_std}, Rewards: {agg_rewards}")
     ##########################################################################################
 
     myEnv.close()

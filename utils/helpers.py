@@ -186,3 +186,9 @@ def prep_ac_dict_recsim(n_item, ac_array, k_idx):
     item = best_ac - (n_item * con)
     action = {f"recommend___c{con+1}__i{item+1}": 1}
     return action
+
+def prep_ac_dict_recsim_fallback(n_consumer, n_item, ac_array, k_idx):
+    consumer = np.argmax(ac_array)
+    item = np.round(ac_array[consumer])
+    action = {f"recommend___c{int(consumer) + 1}__i{int(item) + 1}": 1}
+    return action
