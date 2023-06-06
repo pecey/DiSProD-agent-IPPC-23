@@ -127,7 +127,10 @@ class ContinuousDisprod():
         if cfg["env_name"] == "recsim":
             n_consumer = len(rddl_model.objects["consumer"])
             n_item = len(rddl_model.objects["item"]) 
-            projection_fn = jax.vmap(partial(projection_fn, len(cfg_env["bool_ga_idx"]), n_consumer, n_item), in_axes=(0), out_axes=(0))
+            if cfg["fallback"]:
+                projection_fn = jax.vmap(partial(projection_fn, len(cfg_env["bool_ga_idx"]), n_consumer, n_item), in_axes=(0), out_axes=(0))
+            else:
+                projection_fn = jax.vmap(partial(projection_fn, len(cfg_env["bool_ga_idx"])), in_axes=(0), out_axes=(0))
         else:
             projection_fn = jax.vmap(partial(projection_fn, len(cfg_env["bool_ga_idx"])), in_axes=(0), out_axes=(0))
         # projection_fn = cfg_env["projection_fn"]

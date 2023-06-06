@@ -109,6 +109,7 @@ def main(env, inst, method_name=None, episodes=1):
             cfg[cfg["mode"]]["restarts"]=2000
             cfg[cfg["mode"]]["overwrite_lrs"] = True
             cfg[cfg["mode"]]["lrs_to_scan"] = [0 for _ in range(n_consumer)]
+            cfg["fallback"] = True
             ac_dict_fn = partial(helpers.prep_ac_dict_recsim_fallback, n_consumer, n_item)
             
         # Get a dummy obs
