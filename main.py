@@ -145,7 +145,7 @@ def main(env, inst, method_name=None, episodes=1):
                     else:
                         model = rddl_model
                         _cfg_env = cfg_env
-                    combs.append[(mode, model, _cfg_env, s_wt)]
+                    combs.append((mode, model, _cfg_env, s_wt))
             scan_res = []
             heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, g_obs_keys, ga_keys, ac_dict_fn, n_episodes=5)
 
