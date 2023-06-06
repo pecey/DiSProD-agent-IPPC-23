@@ -7,7 +7,7 @@ logic_kwargs: {weight: 5}
 posinf: 15
 neginf: -15
 
-mode: no_var
+mode: sampling
 
 complete:
   step_size: 10

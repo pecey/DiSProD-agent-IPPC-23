@@ -25,6 +25,7 @@ class ContinuousDisprod():
         self.nA = cfg_env["nA"]
         self.nS = cfg_env["nS"]
         self.depth = cfg.get("depth")
+        self.adjust_lr = cfg["adjust_lr"]
 
         mode = cfg["mode"]
         self.n_res_lr = cfg[mode]["n_restarts"]
@@ -109,9 +110,10 @@ class ContinuousDisprod():
         _, _, _, _, grad_mean = self.choose_action(dummy_obs, dummy_ac_seq, dummy_key_2, dummy_lrs_to_scan)
         abs_grad_mean = jnp.mean(jnp.abs(grad_mean), axis=0) + 1e-12
         __lr = 1/abs_grad_mean
-        for i in range(self.nA):
-            while __lr[i] > self.ac_ub[i]:
-                __lr = __lr.at[i].set(__lr[i]/10)
+        if self.adjust_lr:
+            for i in range(self.nA):
+                while __lr[i] > self.ac_ub[i]:
+                    __lr = __lr.at[i].set(__lr[i]/10)
         return jnp.array([__lr*10, __lr, __lr/10])
 
     def _setup_q_fn(self, noise_dist, dist_fn):
@@ -127,7 +129,7 @@ class ContinuousDisprod():
         if cfg["env_name"] == "recsim":
             n_consumer = len(rddl_model.objects["consumer"])
             n_item = len(rddl_model.objects["item"]) 
-            if cfg["fallback"]:
+            if not cfg["fallback"]:
                 projection_fn = jax.vmap(partial(projection_fn, len(cfg_env["bool_ga_idx"]), n_consumer, n_item), in_axes=(0), out_axes=(0))
             else:
                 projection_fn = jax.vmap(partial(projection_fn, len(cfg_env["bool_ga_idx"])), in_axes=(0), out_axes=(0))

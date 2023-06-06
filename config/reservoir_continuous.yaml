@@ -4,7 +4,7 @@ depth: 5
 logic: FuzzyLogic
 logic_kwargs: {weight: 5}
 
-mode: no_var
+mode: sampling
 
 complete:
   step_size: 1

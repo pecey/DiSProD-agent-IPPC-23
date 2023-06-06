@@ -10,6 +10,8 @@ neginf: -100
 projection_fn: planners.projections:project_dummy
 overwrite_ac_bounds: False
 fallback: False
+skip_search: False
+adjust_lr: True
 
 logic: FuzzyLogic
 logic_kwargs: {weight: 10}

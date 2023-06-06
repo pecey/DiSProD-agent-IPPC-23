@@ -2,7 +2,10 @@ env_name: recsim
 depth: 25
 projection_fn: planners.projections:project_recsim
 
-mode: no_var
+logic: FuzzyLogic
+logic_kwargs: {weight: 5}
+
+mode: sampling
 
 complete:
   step_size: 10

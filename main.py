@@ -90,9 +90,9 @@ def main(env, inst, method_name=None, episodes=1):
         g_obs_keys, ga_keys, ac_dict_fn, cfg_env = helpers.prepare_cfg_env(env, myEnv, rddl_model, cfg)
         _, _, _, reparam_cfg_env = helpers.prepare_cfg_env(env, myEnv, reparam_rddl_model, cfg)
                 
-        # For large RecSim instances
+        # For large RecSim instances and MarsRover
         fallback = True if cfg_env["nA"] > 500 else False
-        heuristic_scan = False if fallback else True
+        heuristic_scan = False if fallback or cfg["skip_search"] else True
         
         if fallback and cfg["env_name"] == "recsim":
             n_consumer = len(rddl_model.objects["consumer"])
