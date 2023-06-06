@@ -170,7 +170,7 @@ def prepare_cfg_env(env_name, myEnv, rddl_model, cfg):
         ac_dict_fn = partial(prep_ac_dict_recsim, n_item)
     else:
         # cfg_env["projection_fn"] = jax.vmap(partial(projection_fn, len(bool_ga_idx)), in_axes=(0), out_axes=(0))
-        ga_keys_output_mapping = {idx: ((key, lambda x: float(x)) if idx in real_ga_idx else (key, lambda x: int(x)))  for idx, key in enumerate(ga_keys)}    
+        ga_keys_output_mapping = {idx: ((key, float) if idx in real_ga_idx else (key, int))  for idx, key in enumerate(ga_keys)}    
         ac_dict_fn = partial(prep_ac_dict, ga_keys_output_mapping)
     
 
