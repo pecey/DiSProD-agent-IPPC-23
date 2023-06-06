@@ -73,7 +73,7 @@ def eval_episode(g_obs_keys, ga_keys, env, agent, agent_key, prev_ac_seq, lrs_to
     agg_reward = 0
     while not done:
         obs_array = np.array([state[i] for i in g_obs_keys])
-        ac_array, k_idx, prev_ac_seq, agent_key = agent.choose_action(obs_array, prev_ac_seq, agent_key, lrs_to_scan)
+        ac_array, k_idx, prev_ac_seq, agent_key, _ = agent.choose_action(obs_array, prev_ac_seq, agent_key, lrs_to_scan)
         action = ac_dict_fn(ac_array, k_idx)
         next_state, reward, done, info = env.step(action)
         state = next_state
