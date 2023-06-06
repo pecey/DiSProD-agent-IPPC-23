@@ -130,7 +130,7 @@ def main(env, inst, method_name=None, episodes=1):
 
         scan_res = sorted(scan_res, key=lambda x: (x[0]))
         
-        better_mode, better_weight = scan_res[-1][1:] 
+        better_mode, better_weight = scan_res[-1][1], scan_res[-1][2] 
         checkpoint = time.time()
         print(f"[Time left: {init_budget - (checkpoint - start)}] Heuristic scan complete.")
 

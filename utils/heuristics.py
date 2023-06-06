@@ -60,7 +60,7 @@ def compute_score_stats(domain, instance, rddl_model, cfg_env, g_obs_keys, ga_ke
     
     # Evaluate the agent of the remaining number of episodes
     for i in range(n_episodes):
-        agg_reward, _, prev_ac_seq, agent_key = eval_episode(g_obs_keys, ga_keys, env, agent, agent_key, prev_ac_seq)
+        agg_reward, _, prev_ac_seq, agent_key = eval_episode(g_obs_keys, ga_keys, env, agent, agent_key, prev_ac_seq, lrs_to_scan, ac_dict_fn)
         scores.append(agg_reward)
     del agent
     env.close()
