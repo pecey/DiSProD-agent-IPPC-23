@@ -107,7 +107,8 @@ class ContinuousDisprod():
         dummy_ac_seq = jax.random.uniform(dummy_key_1, shape=(self.depth, self.nA))
         dummy_lrs_to_scan = jnp.ones((3, self.nA))
         _, _, _, _, grad_mean = self.choose_action(dummy_obs, dummy_ac_seq, dummy_key_2, dummy_lrs_to_scan)
-        __lr = 1/jnp.mean(jnp.abs(grad_mean), axis=0)
+        abs_grad_mean = jnp.mean(jnp.abs(grad_mean), axis=0) + 1e-12
+        __lr = 1/abs_grad_mean
         for i in range(self.nA):
             while __lr[i] > self.ac_ub[i]:
                 __lr = __lr.at[i].set(__lr[i]/10)
