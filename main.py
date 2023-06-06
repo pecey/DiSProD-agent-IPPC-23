@@ -117,7 +117,7 @@ def main(env, inst, method_name=None, episodes=1):
         combs = [("no_var", 1), ("no_var", 3), ("no_var", 5), ("no_var", 10),
                  ("sampling", 1), ("sampling", 3), ("sampling", 5), ("sampling", 10)]
         scan_res = []
-        heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys, n_episodes=5)
+        heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys, ac_dict_fn, n_episodes=5)
 
         # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
         context = mp.get_context("spawn")
