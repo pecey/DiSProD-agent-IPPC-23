@@ -161,15 +161,15 @@ def prepare_cfg_env(env_name, myEnv, rddl_model, cfg):
     cfg_env["s_gs_idx"] = s_gs_idx
     cfg_env["a_ga_idx"] = a_ga_idx
     
-    projection_fn = load_method(cfg["projection_fn"])
+    # projection_fn = load_method(cfg["projection_fn"])
     
     if "recsim" in env_name.lower():
-        n_consumer = len(rddl_model.objects["consumer"])
+        # n_consumer = len(rddl_model.objects["consumer"])
         n_item = len(rddl_model.objects["item"]) 
-        cfg_env["projection_fn"] = jax.vmap(partial(projection_fn, len(bool_ga_idx), n_consumer, n_item), in_axes=(0), out_axes=(0))
+        # cfg_env["projection_fn"] = jax.vmap(partial(projection_fn, len(bool_ga_idx), n_consumer, n_item), in_axes=(0), out_axes=(0))
         ac_dict_fn = partial(prep_ac_dict_recsim, n_item)
     else:
-        cfg_env["projection_fn"] = jax.vmap(partial(projection_fn, len(bool_ga_idx)), in_axes=(0), out_axes=(0))
+        # cfg_env["projection_fn"] = jax.vmap(partial(projection_fn, len(bool_ga_idx)), in_axes=(0), out_axes=(0))
         ga_keys_output_mapping = {idx: ((key, lambda x: float(x)) if idx in real_ga_idx else (key, lambda x: int(x)))  for idx, key in enumerate(ga_keys)}    
         ac_dict_fn = partial(prep_ac_dict, ga_keys_output_mapping)
     
