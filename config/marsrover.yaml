@@ -1,4 +1,4 @@
-env_name: mars-rover
+env_name: marsrover
 depth: 40
 projection_fn: planners.projections:project_dummy
 

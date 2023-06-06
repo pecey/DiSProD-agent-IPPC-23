@@ -1,4 +1,4 @@
-env_name: racecar-continuous
+env_name: racecar
 max_episode_steps: 200
 depth: 100
 

@@ -1,4 +1,4 @@
-env_name: mountain-car
+env_name: mountaincar
 depth: 100
 
 logic: FuzzyLogic
