@@ -34,7 +34,7 @@ def compute_avg_action_time(domain, instance, rddl_model, cfg_env, g_obs_keys, g
     return (np.mean(times), np.std(times), (mode, depth))
 
 COMPUTE_SCORE_STATS_TIME = 1200
-def compute_score_stats(domain, instance, rddl_model, cfg_env, g_obs_keys, ga_keys, ac_dict_fn, cfg, mode, s_weight, n_episodes=10):
+def compute_score_stats(domain, instance, g_obs_keys, ga_keys, ac_dict_fn, cfg, mode, rddl_model, cfg_env, s_weight, n_episodes=10):
     start = time.time()
     env = RDDLEnv.RDDLEnv(domain=domain,
                             instance=instance,

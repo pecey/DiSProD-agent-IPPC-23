@@ -136,15 +136,23 @@ def main(env, inst, method_name=None, episodes=1):
         # H1: Search across different modes and see which is better
         ##################################################################
         if heuristic_scan:
-            combs = [("no_var", 1), ("no_var", 3), ("no_var", 5), ("no_var", 10),
-                    ("sampling", 1), ("sampling", 3), ("sampling", 5), ("sampling", 10)]
+            combs = []
+            for mode in ["no_var", "sampling"]:
+                for s_wt in [1, 3, 5, 10]:
+                    if mode == "no_var":
+                        model = reparam_rddl_model
+                        _cfg_env = reparam_cfg_env
+                    else:
+                        model = rddl_model
+                        _cfg_env = cfg_env
+                    combs.append[(mode, model, _cfg_env, s_wt)]
             scan_res = []
-            heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys, ac_dict_fn, n_episodes=5)
+            heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, g_obs_keys, ga_keys, ac_dict_fn, n_episodes=5)
 
             # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
             context = mp.get_context("spawn")
             with ProcessPoolExecutor(mp_context=context) as executor:
-                jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, s_weight) for (mode, s_weight) in combs]
+                jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, model, _cfg_env, s_wt) for (mode, model, _cfg_env, s_wt) in combs]
 
                 for job in as_completed(jobs):
                     result = job.result()
