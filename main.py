@@ -27,8 +27,14 @@ DISPROD_NOISE_VARS = ["disprod_eps_norm", "disprod_eps_uni"]
 ############################################################
 
 HOUR = 3600
+
+###########################################
+# Adding this to enable better handling of exceptions
+class TimeoutException(Exception): 
+    pass
+###########################################
 def signal_handler(signum, frame):
-    raise Exception("Timed out!")
+    raise TimeoutException("Timed out!")
 
 
 # MAIN INTERACTION LOOP #
@@ -165,7 +171,7 @@ def main(env, inst, method_name=None, episodes=1):
 
         
         ##############################################################
-    except:
+    except TimeoutException:
         finish = time.time()
         print('Initialization timed out', finish - start, ' seconds)')
         # print('This domain will continue exclusively with default actions!')
@@ -204,7 +210,7 @@ def main(env, inst, method_name=None, episodes=1):
                     #################################################################
                     finish = time.time()
                     print(f"[Time: {finish-start}] Action generated {action}")
-                except:
+                except TimeoutException:
                     finish = time.time()
                     print('Timed out! (', finish-start, ' seconds)')
                     print('This episode will continue with default actions!')
