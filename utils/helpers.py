@@ -6,6 +6,7 @@ from pyRDDLGymHelper.Core.Parser import parser as Rddlparser
 from pyRDDLGymHelper.Core.Parser.RDDLReader import RDDLReader
 from pyRDDLGymHelper.Core.Compiler.RDDLLiftedModel import RDDLLiftedModel
 
+from functools import partial
 from utils.common_utils import load_method
 
 EPS_STR = {"normal": "disprod_eps_norm",
@@ -165,10 +166,10 @@ def prepare_cfg_env(env_name, myEnv, rddl_model, cfg):
     if "recsim" in env_name.lower():
         n_consumer = len(rddl_model.objects["consumer"])
         n_item = len(rddl_model.objects["item"]) 
-        cfg_env["projection_fn"] = jax.vmap(projection_fn(len(bool_ga_idx), n_consumer, n_item), in_axes=(0), out_axes=(0))
+        cfg_env["projection_fn"] = jax.vmap(partial(projection_fn, len(bool_ga_idx), n_consumer, n_item), in_axes=(0), out_axes=(0))
         ac_dict_fn = prep_ac_dict_recsim(n_item)
     else:
-        cfg_env["projection_fn"] = jax.vmap(projection_fn(len(bool_ga_idx)), in_axes=(0), out_axes=(0))
+        cfg_env["projection_fn"] = jax.vmap(partial(projection_fn, len(bool_ga_idx)), in_axes=(0), out_axes=(0))
         ga_keys_output_mapping = {idx: ((key, lambda x: float(x)) if idx in real_ga_idx else (key, lambda x: int(x)))  for idx, key in enumerate(ga_keys)}    
         ac_dict_fn = prep_ac_dict(ga_keys_output_mapping)
     
