@@ -23,8 +23,8 @@ start_time=`(date +%s)`
 echo Start time: ${start_time}
 
 source ${HOME}/IPC23-venv/bin/activate
-cd /N/u/palchatt/BigRed3/IPC23
-export IPC_PATH=/N/u/palchatt/BigRed3/IPC23
+cd /N/u/palchatt/BigRed3/RDDL-demo-agent-IPPC-23
+# export IPC_PATH=/N/u/palchatt/BigRed3/RDDL-demo-agent-IPPC-23
 
 # To evaluate model
 PYTHONPATH=. python main.py ${env_name} ${inst}c ${n_episodes}
