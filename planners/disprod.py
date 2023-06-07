@@ -154,7 +154,7 @@ class ContinuousDisprod():
         key, subkey1, subkey2, subkey3, subkey4 = jax.random.split(key, 5)
 
         # Initialize the action distribution. Shape: (n_res, depth, nA)
-        ac_mean, ac_var = self.ac_dist_init_fn(subkey1, ac_seq, len(lrs_to_scan))
+        ac_mean, ac_var = self.ac_dist_init_fn(subkey1, ac_seq, 3)
 
         # Optimizer for continuous action variables - mean and variance
         opt_init_mean, opt_update_mean, get_params_mean = adam_with_clipping(self.step_size)

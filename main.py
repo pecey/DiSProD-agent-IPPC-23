@@ -224,7 +224,10 @@ def main(env, inst, method_name=None, episodes=1):
 
 # Command line interface, DO NOT CHANGE
 if __name__ == "__main__":
-    # args = sys.argv
+    args = sys.argv
+    # env = args[1]
+    # inst = args[2]
+    # episodes = 10
     # print(args)
     # method_name = None
     # episodes = 1
@@ -243,7 +246,7 @@ if __name__ == "__main__":
     #         episodes = int(episodes)
     #     except:
     #         raise ValueError("episode must be an integer value argument, received: " + episodes)
-    env="MountainCar"
+    env="Reservoir continuous"
     inst=1
     method_name="disprod"
     episodes=1

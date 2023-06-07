@@ -10,19 +10,19 @@ complete:
   step_size: 1
   step_size_var: 0.1
   n_restarts: 2000
-  lrs_to_scan: [0.001, 0.1, 1, 2]
+  lrs_to_scan: [0.001, 0.1, 1]
   overwrite_lrs: True
 
 sampling:
   step_size: 1
   step_size_var: 0.1
   n_restarts: 2000
-  lrs_to_scan: [0.001, 0.1, 1, 2]
+  lrs_to_scan: [0.001, 0.1, 1]
   overwrite_lrs: True
 
 no_var:
   step_size: 1
   step_size_var: 0.1
   n_restarts: 2000
-  lrs_to_scan: [0.001, 0.1, 1, 2]
+  lrs_to_scan: [0.001, 0.1, 1]
   overwrite_lrs: True
