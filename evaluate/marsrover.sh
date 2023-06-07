@@ -3,7 +3,7 @@
 identifier=$(date +%s)_eval
 insts=(1 3 5)
 
-env_name=marsrover
+env_name="MarsRover"
 jids=()
 
 echo "Evaluating ${env_name}"

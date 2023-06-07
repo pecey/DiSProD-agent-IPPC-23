@@ -3,7 +3,7 @@
 identifier=$(date +%s)_eval
 insts=(1 3 5)
 
-env_name=recsim
+env_name="RecSim"
 jids=()
 
 echo "Evaluating ${env_name}"
