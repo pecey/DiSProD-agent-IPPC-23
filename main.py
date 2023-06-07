@@ -60,98 +60,112 @@ def main(env, inst, method_name=None, episodes=1):
 
     signal.setitimer(signal.ITIMER_REAL, init_budget)
     start = time.time()
-    # try:
-    ################################################################
-    # Initialize your agent here:
+    try:
+        ################################################################
+        # Initialize your agent here:
 
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    cfg = prepare_config("_".join(env.lower().split()), f"{current_dir}/config")
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        cfg = prepare_config("_".join(env.lower().split()), f"{current_dir}/config")
 
-    checkpoint = time.time()
-    print(f"[Time: {checkpoint-start}] Loading config from path {current_dir}/config")
+        checkpoint = time.time()
+        print(f"[Time: {checkpoint-start}] Loading config from path {current_dir}/config")
 
-    # Don't reparameterize the RDDL expressions if planner uses sampling
-    domain_path = EnvInfo.get_domain()
-    instance_path = EnvInfo.get_instance(inst)
-    
-    # Setup rddl_model for sampling mode, and reparam_rddl_model for NV and complete mode
-    rddl_model = helpers.gen_model(domain_path, instance_path, False)
-    reparam_rddl_model = helpers.gen_model(domain_path, instance_path, True)
-
-    # Setup cfg_env for sampling mode and reparam_cfg_env for NV and complete mode
-    # TODO: Check if reparam_obs and reparam_a keys are different than normal?
-    g_obs_keys, ga_keys, ac_dict_fn, cfg_env = helpers.prepare_cfg_env(env, myEnv, rddl_model, cfg)
-    _, _, _, reparam_cfg_env = helpers.prepare_cfg_env(env, myEnv, reparam_rddl_model, cfg)
-    
-    # Get a dummy obs
-    dummy_state = myEnv.reset()
-    dummy_obs = np.array([dummy_state[i] for i in g_obs_keys])
-    # Setup default agent depending on the default mode
-    agent_setup_start = time.time()
-    if cfg["mode"] == "sampling":
-        agent = ContinuousDisprod(cfg, rddl_model, cfg_env)
-        lrs_to_scan = agent.pre_warm(dummy_obs)
-    else:
-        agent = ContinuousDisprod(cfg, reparam_rddl_model, reparam_cfg_env)
-        lrs_to_scan = agent.pre_warm(dummy_obs)
+        # Don't reparameterize the RDDL expressions if planner uses sampling
+        domain_path = EnvInfo.get_domain()
+        instance_path = EnvInfo.get_instance(inst)
         
-    agent_key = jax.random.PRNGKey(cfg["seed"])
-    prev_ac_seq, agent_key = agent.reset(agent_key)
-    agent_setup_end = time.time()
+        # Setup rddl_model for sampling mode, and reparam_rddl_model for NV and complete mode
+        rddl_model = helpers.gen_model(domain_path, instance_path, False)
+        reparam_rddl_model = helpers.gen_model(domain_path, instance_path, True)
 
-    time_required_for_agent_setup = agent_setup_end-agent_setup_start
-    print(f"[Time: {time_required_for_agent_setup}] Basic agent initialized.")
+        # Setup cfg_env for sampling mode and reparam_cfg_env for NV and complete mode
+        # TODO: Check if reparam_obs and reparam_a keys are different than normal?
+        g_obs_keys, ga_keys, ac_dict_fn, cfg_env = helpers.prepare_cfg_env(env, myEnv, rddl_model, cfg)
+        _, _, _, reparam_cfg_env = helpers.prepare_cfg_env(env, myEnv, reparam_rddl_model, cfg)
+        
+        # Get a dummy obs
+        dummy_state = myEnv.reset()
+        dummy_obs = np.array([dummy_state[i] for i in g_obs_keys])
+        # Setup default agent depending on the default mode
+        agent_setup_start = time.time()
+        if cfg["mode"] == "sampling":
+            agent = ContinuousDisprod(cfg, rddl_model, cfg_env)
+            lrs_to_scan = agent.pre_warm(dummy_obs)
+        else:
+            agent = ContinuousDisprod(cfg, reparam_rddl_model, reparam_cfg_env)
+            lrs_to_scan = agent.pre_warm(dummy_obs)
+            
+        agent_key = jax.random.PRNGKey(cfg["seed"])
+        prev_ac_seq, agent_key = agent.reset(agent_key)
+        agent_setup_end = time.time()
 
-    # # Perform heuristic scans
-    
-    # ##################################################################
-    # # H1: Search across different modes and see which is better
-    # ##################################################################
+        time_required_for_agent_setup = agent_setup_end-agent_setup_start
+        print(f"[Time: {time_required_for_agent_setup}] Basic agent initialized.")
 
-    # combs = ["no_var", "sampling"]
-    # scan_res = []
-    # heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys, n_episodes=5)
+        # Perform heuristic scans
+        
+        ##################################################################
+        # H1: Search across different modes and see which is better
+        ##################################################################
 
-    # # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
-    # context = mp.get_context("spawn")
-    # with ProcessPoolExecutor(mp_context=context) as executor:
-    #     jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode) for mode in combs]
+        combs = [("no_var", 1), ("no_var", 3), ("no_var", 5), ("no_var", 10),
+                 ("sampling", 1), ("sampling", 3), ("sampling", 5), ("sampling", 10)]
+        scan_res = []
+        heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys, n_episodes=5)
 
-    #     for job in as_completed(jobs):
-    #         result = job.result()
-    #         scan_res.append(result)
+        # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
+        context = mp.get_context("spawn")
+        with ProcessPoolExecutor(mp_context=context) as executor:
+            jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, s_weight) for (mode, s_weight) in combs]
 
-    # scan_res = sorted(scan_res, key=lambda x: (x[0]))
-    
-    # better_mode = scan_res[-1][1] 
+            for job in as_completed(jobs):
+                result = job.result()
+                scan_res.append(result)
 
-    # #################################################################
-    # # H2: Compute the average time taken per mode
-    # ##################################################################
-    # combs = [("no_var", cfg["depth"]), ("sampling", cfg["depth"])]
-    # scan_res = []
-    # heuristic_fn = partial(heuristics.compute_avg_action_time, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys)
+        scan_res = sorted(scan_res, key=lambda x: (x[0]))
+        
+        better_mode, better_weight = scan_res[-1][1:] 
 
-    # # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
-    # context = mp.get_context("spawn")
-    # with ProcessPoolExecutor(mp_context=context) as executor:
-    #     jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, depth) for mode, depth in combs]
+        if better_mode != cfg["mode"] or better_weight != cfg["logic_kwargs"]["weight"]:
+            cfg["mode"] = better_mode
+            cfg["logic_kwargs"]["weight"] = better_weight
+            if cfg["mode"] == "sampling":
+                new_agent = ContinuousDisprod(cfg, rddl_model, cfg_env)
+                new_lrs_to_scan = agent.pre_warm(dummy_obs)
+            else:
+                new_agent = ContinuousDisprod(cfg, reparam_rddl_model, reparam_cfg_env)
+                new_lrs_to_scan = agent.pre_warm(dummy_obs)
+            agent = new_agent
+            lrs_to_scan = new_lrs_to_scan
+        
 
-    #     for job in as_completed(jobs):
-    #         result = job.result()
-    #         print(result)
-    #         scan_res.append(result)
+        # #################################################################
+        # # H2: Compute the average time taken per mode
+        # ##################################################################
+        # combs = [("no_var", cfg["depth"]), ("sampling", cfg["depth"])]
+        # scan_res = []
+        # heuristic_fn = partial(heuristics.compute_avg_action_time, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys)
 
-    # scan_res = sorted(scan_res, key=lambda x: (x[0], x[1]))
-    # print(scan_res)
+        # # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
+        # context = mp.get_context("spawn")
+        # with ProcessPoolExecutor(mp_context=context) as executor:
+        #     jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, depth) for mode, depth in combs]
 
-    
-    ##############################################################
-    # except:
-    #     finish = time.time()
-    #     print('Initialization timed out', finish - start, ' seconds)')
-    #     # print('This domain will continue exclusively with default actions!')
-    #     init_timed_out = True
+        #     for job in as_completed(jobs):
+        #         result = job.result()
+        #         print(result)
+        #         scan_res.append(result)
+
+        # scan_res = sorted(scan_res, key=lambda x: (x[0], x[1]))
+        # print(scan_res)
+
+        
+        ##############################################################
+    except:
+        finish = time.time()
+        print('Initialization timed out', finish - start, ' seconds)')
+        # print('This domain will continue exclusively with default actions!')
+        init_timed_out = True
 
     signal.signal(signal.SIGALRM, signal_handler)
     
@@ -172,27 +186,25 @@ def main(env, inst, method_name=None, episodes=1):
             if not timed_out:
                 signal.setitimer(signal.ITIMER_REAL, elapsed)
                 start = time.time()
-                # try:
-                #################################################################
-                # replace the following line of code with your agent call
-                # action = agent.sample_action()
-                obs_array = np.array([state[i] for i in g_obs_keys])
-                # replace the following line of code with your agent call
-                ac_array, k_idx, prev_ac_seq, agent_key, _ = agent.choose_action(obs_array, prev_ac_seq, agent_key, lrs_to_scan)
-                action = ac_dict_fn(ac_array, k_idx)
+                try:
+                    #################################################################
+                    # replace the following line of code with your agent call
+                    obs_array = np.array([state[i] for i in g_obs_keys])
+                    ac_array, k_idx, prev_ac_seq, agent_key, _ = agent.choose_action(obs_array, prev_ac_seq, agent_key, lrs_to_scan)
+                    action = ac_dict_fn(ac_array, k_idx)
 
-                #################################################################
-                finish = time.time()
-                print(f"[Time: {finish-start}] Action generated {action}")
-                # except:
-                # finish = time.time()
-                # print('Timed out! (', finish-start, ' seconds)')
-                # print('This episode will continue with default actions!')
-                # action = defaultAgent.sample_action()
-                # timed_out = True
-                # elapsed = 0
-                # if not timed_out:
-                #     elapsed = elapsed - (finish-start)
+                    #################################################################
+                    finish = time.time()
+                    print(f"[Time: {finish-start}] Action generated {action}")
+                except:
+                    finish = time.time()
+                    print('Timed out! (', finish-start, ' seconds)')
+                    print('This episode will continue with default actions!')
+                    action = defaultAgent.sample_action()
+                    timed_out = True
+                    elapsed = 0
+                    if not timed_out:
+                        elapsed = elapsed - (finish-start)
             else:
                 action = defaultAgent.sample_action()
 
@@ -225,9 +237,9 @@ def main(env, inst, method_name=None, episodes=1):
 # Command line interface, DO NOT CHANGE
 if __name__ == "__main__":
     args = sys.argv
-    # env = args[1]
-    # inst = args[2]
-    # episodes = 10
+    env = args[1]
+    inst = args[2]
+    episodes = int(args[3])
     # print(args)
     # method_name = None
     # episodes = 1
@@ -246,9 +258,9 @@ if __name__ == "__main__":
     #         episodes = int(episodes)
     #     except:
     #         raise ValueError("episode must be an integer value argument, received: " + episodes)
-    env="Reservoir continuous"
-    inst=1
+    # env="MountainCar"
+    # inst="1c"
     method_name="disprod"
-    episodes=1
+    # episodes=1
     main(env, inst, method_name, episodes)
 

@@ -34,13 +34,14 @@ def compute_avg_action_time(domain, instance, rddl_model, cfg_env, g_obs_keys, g
     return (np.mean(times), np.std(times), (mode, depth))
 
 COMPUTE_SCORE_STATS_TIME = 1200
-def compute_score_stats(domain, instance, rddl_model, cfg_env, g_obs_keys, ga_keys, cfg, mode, n_episodes=10):
+def compute_score_stats(domain, instance, rddl_model, cfg_env, g_obs_keys, ga_keys, cfg, mode, s_weight, n_episodes=10):
     start = time.time()
     env = RDDLEnv.RDDLEnv(domain=domain,
                             instance=instance,
                             enforce_action_constraints=False,
                             debug=True)
     cfg["mode"] = mode
+    cfg["logic_kwargs"]["weight"] = s_weight
     agent = ContinuousDisprod(cfg, rddl_model, cfg_env)
     agent_key = jax.random.PRNGKey(cfg["seed"])
     prev_ac_seq, agent_key = agent.reset(agent_key)
@@ -58,7 +59,7 @@ def compute_score_stats(domain, instance, rddl_model, cfg_env, g_obs_keys, ga_ke
         scores.append(agg_reward)
     del agent
     env.close()
-    return np.mean(scores) - np.std(scores), mode
+    return np.mean(scores) - np.std(scores), mode, s_weight
 
 def eval_episode(g_obs_keys, ga_keys, env, agent, agent_key, prev_ac_seq):
     start = time.time()
