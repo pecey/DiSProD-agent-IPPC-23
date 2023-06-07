@@ -177,6 +177,10 @@ def main(env, inst, method_name=None, episodes=1):
         print("Over-riding LRs")
         lrs_to_scan = cfg[cfg["mode"]]["lrs_to_scan"]
 
+    ###################################
+    # Adding this 
+    agg_rewards=[]
+    ####################################
     for episode in range(episodes):
         total_reward = 0
         state = myEnv.reset()
@@ -227,7 +231,14 @@ def main(env, inst, method_name=None, episodes=1):
             if done:
                 break
 
-        print(f'episode {episode+1} ended with reward {total_reward} after {budget-elapsed} seconds')
+            print(f'episode {episode+1} ended with reward {total_reward} after {budget-elapsed} seconds')
+    ########################################################################################
+            agg_rewards.append(total_reward)
+        
+        rewards_mean = np.mean(agg_rewards)
+        rewards_std = np.std(agg_rewards)
+        print(f"Mean: {rewards_mean}, SD: {rewards_std}, Rewards: {agg_rewards}")
+    ##########################################################################################
 
     myEnv.close()
 
