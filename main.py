@@ -92,6 +92,7 @@ def main(env, inst, method_name=None, episodes=1):
         
         if fallback and cfg["env_name"] == "recsim":
             g_obs_keys, ac_dict_fn, cfg_env = helpers.prepare_cfg_env_fallback_recsim(myEnv, cfg, rddl_model)
+            del reparam_rddl_model
         else:
         
             # Setup cfg_env for sampling mode and reparam_cfg_env for NV and complete mode

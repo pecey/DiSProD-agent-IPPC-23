@@ -3,7 +3,7 @@ import jax.numpy as jnp
 from functools import partial
 
 def project_dummy(nA, ac):
-    return ac
+    return jnp.clip(ac, 0, 1)
 
 # Projection function for sum = 1 constraint 
 # https://arxiv.org/pdf/1309.1541.pdf
