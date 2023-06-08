@@ -28,14 +28,8 @@ DISPROD_NOISE_VARS = ["disprod_eps_norm", "disprod_eps_uni"]
 ############################################################
 
 HOUR = 3600
-
-###########################################
-# Adding this to enable better handling of exceptions
-class TimeoutException(Exception): 
-    pass
-###########################################
 def signal_handler(signum, frame):
-    raise TimeoutException("Timed out!")
+    raise Exception("Timed out!")
 
 
 # MAIN INTERACTION LOOP #
@@ -114,6 +108,9 @@ def main(env, inst, method_name=None, episodes=1):
             
         agent_key = jax.random.PRNGKey(cfg["seed"])
         prev_ac_seq, agent_key = agent.reset(agent_key)
+        if cfg[cfg["mode"]]["overwrite_lrs"]:
+            lrs_to_scan = cfg[cfg["mode"]]["lrs_to_scan"]
+        
         agent_setup_end = time.time()
 
         time_required_for_agent_setup = agent_setup_end-agent_setup_start
@@ -162,7 +159,10 @@ def main(env, inst, method_name=None, episodes=1):
                     new_agent = ContinuousDisprod(cfg, reparam_rddl_model, reparam_cfg_env)
                     new_lrs_to_scan = agent.pre_warm(dummy_obs)
                 agent = new_agent
-                lrs_to_scan = new_lrs_to_scan
+                if cfg[cfg["mode"]]["overwrite_lrs"]:
+                    lrs_to_scan = cfg[cfg["mode"]]["lrs_to_scan"]
+                else:
+                    lrs_to_scan = new_lrs_to_scan
                 checkpoint = time.time()
                 print(f"[Time left: {init_budget - (checkpoint - start)}] Found better config during scan. New agent initialized.")
         
@@ -189,7 +189,7 @@ def main(env, inst, method_name=None, episodes=1):
 
         
         ##############################################################
-    except TimeoutException:
+    except:
         finish = time.time()
         print('Initialization timed out', finish - start, ' seconds)')
         # print('This domain will continue exclusively with default actions!')
@@ -197,14 +197,6 @@ def main(env, inst, method_name=None, episodes=1):
 
     signal.signal(signal.SIGALRM, signal_handler)
     
-    if cfg[cfg["mode"]]["overwrite_lrs"]:
-        print("Over-riding LRs")
-        lrs_to_scan = cfg[cfg["mode"]]["lrs_to_scan"]
-
-    ###################################
-    # Adding this 
-    agg_rewards=[]
-    ####################################
     for episode in range(episodes):
         total_reward = 0
         state = myEnv.reset()
@@ -227,8 +219,7 @@ def main(env, inst, method_name=None, episodes=1):
 
                     #################################################################
                     finish = time.time()
-                    print(f"[Time: {finish-start}] Action generated {action}")
-                except TimeoutException:
+                except:
                     finish = time.time()
                     print('Timed out! (', finish-start, ' seconds)')
                     print('This episode will continue with default actions!')
@@ -256,13 +247,6 @@ def main(env, inst, method_name=None, episodes=1):
                 break
 
         print(f'episode {episode+1} ended with reward {total_reward} after {budget-elapsed} seconds')
-    ########################################################################################
-        agg_rewards.append(total_reward)
-        
-    rewards_mean = np.mean(agg_rewards)
-    rewards_std = np.std(agg_rewards)
-    print(f"Mean: {rewards_mean}, SD: {rewards_std}, Rewards: {agg_rewards}")
-    ##########################################################################################
 
     myEnv.close()
 
@@ -278,30 +262,23 @@ def main(env, inst, method_name=None, episodes=1):
 # Command line interface, DO NOT CHANGE
 if __name__ == "__main__":
     args = sys.argv
-    env = args[1]
-    inst = args[2]
-    episodes = int(args[3])
-    # print(args)
-    # method_name = None
-    # episodes = 1
-    # if len(args) == 2:
-    #     if args[0] == '-h':
-    #         print('python GymExample.py <domain> <instance> <method name> <num episodes>')
-    # if len(args) < 3:
-    #     env, inst = 'HVAC', '1'
-    # elif len(args) < 4:
-    #     env, inst = args[1:3]
-    # elif len(args) < 5:
-    #     env, inst, method_name = args[1:4]
-    # else:
-    #     env, inst, method_name, episodes = args[1:5]
-    #     try:
-    #         episodes = int(episodes)
-    #     except:
-    #         raise ValueError("episode must be an integer value argument, received: " + episodes)
-    # env="MountainCar"
-    # inst="1c"
-    method_name="disprod"
-    # episodes=1
+    print(args)
+    method_name = None
+    episodes = 1
+    if len(args) == 2:
+        if args[0] == '-h':
+            print('python GymExample.py <domain> <instance> <method name> <num episodes>')
+    if len(args) < 3:
+        env, inst = 'HVAC', '1'
+    elif len(args) < 4:
+        env, inst = args[1:3]
+    elif len(args) < 5:
+        env, inst, method_name = args[1:4]
+    else:
+        env, inst, method_name, episodes = args[1:5]
+        try:
+            episodes = int(episodes)
+        except:
+            raise ValueError("episode must be an integer value argument, received: " + episodes)
     main(env, inst, method_name, episodes)
 
