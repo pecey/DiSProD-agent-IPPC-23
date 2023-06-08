@@ -1,5 +1,5 @@
 env_name: recsim
-depth: 25
+depth: 2
 projection_fn: planners.projections:project_recsim
 
 logic: FuzzyLogic

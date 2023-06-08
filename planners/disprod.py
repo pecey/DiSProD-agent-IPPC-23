@@ -3,7 +3,7 @@ import jax.numpy as jnp
 
 from functools import partial
 from planners.utils import adam_with_clipping, adam_with_projection
-from planners.helpers import ns_and_reward_partial
+from planners.helpers import ns_and_reward_partial, ns_and_reward_partial_recsim
 from utils.common_utils import load_method
 import gym.spaces as spaces
 from pyRDDLGymHelper.Core.Jax import JaxRDDLLogic, JaxRDDLBackpropPlanner
@@ -19,7 +19,7 @@ class ContinuousDisprod():
         a_keys = cfg_env["a_keys"]
         ns_keys = cfg_env["ns_keys"]
         s_gs_idx = cfg_env["s_gs_idx"]
-        a_ga_idx = cfg_env["a_ga_idx"]
+        
         self.n_output = cfg_env["n_concurrent_ac"]
         
         self.nA = cfg_env["nA"]
@@ -44,12 +44,18 @@ class ContinuousDisprod():
         jax_compiled_model = JaxRDDLBackpropPlanner.JaxRDDLCompilerWithGrad(rddl=rddl_model, logic=fuzzy_logic)
         jax_compiled_model.compile()
 
-        noop_ac = {}
-        for k in jax_compiled_model.rddl.actions.keys():
-            noop_ac.update(jax_compiled_model.rddl.ground_values(k, jax_compiled_model.init_values[k]))
-        g_noop_ac = jnp.array([noop_ac[k] for k in ga_keys])
-
-        ns_and_rew_fn = ns_and_reward_partial(jax_compiled_model, s_keys, a_keys, ns_keys, s_gs_idx, a_ga_idx)
+        if cfg["fallback"] and cfg["env_name"] == "recsim":
+            n_consumer = len(rddl_model.objects["consumer"])
+            n_item = len(rddl_model.objects["item"])
+            ns_and_rew_fn = ns_and_reward_partial_recsim(jax_compiled_model, s_keys, ns_keys, s_gs_idx, n_consumer, n_item)
+            g_noop_ac = jnp.array([0 for k in ga_keys])
+        else:
+            a_ga_idx = cfg_env["a_ga_idx"]
+            ns_and_rew_fn = ns_and_reward_partial(jax_compiled_model, s_keys, a_keys, ns_keys, s_gs_idx, a_ga_idx)
+            noop_ac = {}
+            for k in jax_compiled_model.rddl.actions.keys():
+                noop_ac.update(jax_compiled_model.rddl.ground_values(k, jax_compiled_model.init_values[k]))
+                g_noop_ac = jnp.array([noop_ac[k] for k in ga_keys])
 
         # Setup action bounds
         ac_bounds_user = cfg[mode].get("action_bounds", {})

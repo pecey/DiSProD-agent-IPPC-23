@@ -85,33 +85,20 @@ def main(env, inst, method_name=None, episodes=1):
         rddl_model = helpers.gen_model(domain_path, instance_path, False)
         reparam_rddl_model = helpers.gen_model(domain_path, instance_path, True)
 
-        # Setup cfg_env for sampling mode and reparam_cfg_env for NV and complete mode
-        # TODO: Check if reparam_obs and reparam_a keys are different than normal?
-        g_obs_keys, ga_keys, ac_dict_fn, cfg_env = helpers.prepare_cfg_env(env, myEnv, rddl_model, cfg)
-        _, _, _, reparam_cfg_env = helpers.prepare_cfg_env(env, myEnv, reparam_rddl_model, cfg)
-                
-        # For large RecSim instances and MarsRover
-        fallback = True if cfg_env["nA"] > 500 else False
+        # For large RecSim instances and MarsRover       
+        fallback = True if len(myEnv.action_space) > 250 else False
         heuristic_scan = False if fallback or cfg["skip_search"] else True
         
+        
         if fallback and cfg["env_name"] == "recsim":
-            n_consumer = len(rddl_model.objects["consumer"])
-            n_item = len(rddl_model.objects["item"]) 
-            cfg_env["nA"] = n_consumer
-            cfg_env["action_space"] = Dict()
-            for i in range(n_consumer):
-                cfg_env["action_space"][f"recommend__{i+1}"] = Box(low = 0, high = n_item - 1, dtype=np.float32)
-            cfg_env['ga_keys'] = [f"recommend__{i+1}" for i in range(n_consumer)]
-            cfg_env['bool_ga_idx'] = []
-            cfg_env['real_ga_idx'] = np.arange(0, n_consumer).tolist()
-            cfg_env["noop_ac"] = [0.0 for i in range(n_consumer)]
-            cfg["projection_fn"] = "planners.projections:project_dummy"
-            cfg[cfg["mode"]]["restarts"]=2000
-            cfg[cfg["mode"]]["overwrite_lrs"] = True
-            cfg[cfg["mode"]]["lrs_to_scan"] = [0 for _ in range(n_consumer)]
-            cfg["fallback"] = True
-            ac_dict_fn = partial(helpers.prep_ac_dict_recsim_fallback, n_consumer, n_item)
-            
+            g_obs_keys, ac_dict_fn, cfg_env = helpers.prepare_cfg_env_fallback_recsim(myEnv, cfg, rddl_model)
+        else:
+        
+            # Setup cfg_env for sampling mode and reparam_cfg_env for NV and complete mode
+            # TODO: Check if reparam_obs and reparam_a keys are different than normal?
+            g_obs_keys, ga_keys, ac_dict_fn, cfg_env = helpers.prepare_cfg_env(env, myEnv, rddl_model, cfg)
+            _, _, _, reparam_cfg_env = helpers.prepare_cfg_env(env, myEnv, reparam_rddl_model, cfg)
+             
         # Get a dummy obs
         dummy_state = myEnv.reset()
         dummy_obs = np.array([dummy_state[i] for i in g_obs_keys])
@@ -277,6 +264,8 @@ def main(env, inst, method_name=None, episodes=1):
     ##########################################################################################
 
     myEnv.close()
+
+
 
     ########################################
     # CLEAN UP ANY RESOURCES YOU HAVE USED #
