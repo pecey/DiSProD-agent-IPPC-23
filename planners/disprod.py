@@ -2,17 +2,19 @@ import jax
 import jax.numpy as jnp
 
 from functools import partial
-from planners.utils import adam_with_clipping, adam_with_projection
+from planners.utils import adam_with_clipping, adam_with_projection, rmsprop_with_clipping, rmsprop_with_projection
 from planners.helpers import ns_and_reward_partial, ns_and_reward_partial_recsim
 from utils.common_utils import load_method
 import gym.spaces as spaces
 from pyRDDLGymHelper.Core.Jax import JaxRDDLLogic, JaxRDDLBackpropPlanner
+from jax.example_libraries.optimizers import clip_grads
 
 
 DISPROD_NOISE_VARS = ["disprod_eps_norm", "disprod_eps_uni"]
 
 class ContinuousDisprod():
     def __init__(self, cfg, rddl_model, cfg_env={}):
+        
 
         ga_keys = cfg_env['ga_keys']
         s_keys = cfg_env["s_keys"]
@@ -21,7 +23,6 @@ class ContinuousDisprod():
         s_gs_idx = cfg_env["s_gs_idx"]
         
         self.n_output = cfg_env["n_concurrent_ac"]
-        
         self.nA = cfg_env["nA"]
         self.nS = cfg_env["nS"]
         self.depth = cfg.get("depth")
@@ -30,13 +31,22 @@ class ContinuousDisprod():
         mode = cfg["mode"]
         self.n_res_lr = cfg[mode]["n_restarts"]
         self.max_grad_steps = cfg[mode]["max_grad_steps"]
-        self.step_size = cfg[mode]["step_size"]
-        self.step_size_var = cfg[mode]["step_size_var"]
+        # self.step_size = cfg[mode]["step_size"]
+        # self.step_size_var = cfg[mode]["step_size_var"]
         self.conv_thresh = cfg[mode]["convergance_threshold"]
-            
+
+        self.clip_grad = cfg["clip_grad"]
+
         self.bool_s_idx = jnp.array(cfg_env['bool_s_idx'], dtype=jnp.int32)
         self.bool_ga_idx = jnp.array(cfg_env['bool_ga_idx'], dtype=jnp.int32)
         self.real_ga_idx = jnp.array(cfg_env['real_ga_idx'], dtype=jnp.int32)
+        
+        if cfg[mode]["optimizer"] == "adam":
+            self.opt_proj_fn = adam_with_projection
+            self.opt_clip_fn = adam_with_clipping
+        else:
+            self.opt_proj_fn = rmsprop_with_projection
+            self.opt_clip_fn = rmsprop_with_clipping
 
         tnorm = getattr(JaxRDDLLogic, cfg['tnorm'])(**cfg['tnorm_kwargs'])
         fuzzy_logic = getattr(JaxRDDLLogic, cfg['logic'])(tnorm=tnorm, **cfg['logic_kwargs'])
@@ -55,7 +65,7 @@ class ContinuousDisprod():
             noop_ac = {}
             for k in jax_compiled_model.rddl.actions.keys():
                 noop_ac.update(jax_compiled_model.rddl.ground_values(k, jax_compiled_model.init_values[k]))
-                g_noop_ac = jnp.array([noop_ac[k] for k in ga_keys])
+            g_noop_ac = jnp.array([noop_ac[k] for k in ga_keys])
 
         # Setup action bounds
         ac_bounds_user = cfg[mode].get("action_bounds", {})
@@ -168,16 +178,20 @@ class ContinuousDisprod():
 
         # Initialize the action distribution. Shape: (n_res, depth, nA)
         ac_mean, ac_var = self.ac_dist_init_fn(subkey1, ac_seq, 3)
+        
+        step_size_real = lr_matrix[:, :, self.real_ga_idx]
+        step_size_var_real = step_size_real/10
+        step_size_bool = lr_matrix[:, :, self.bool_ga_idx]
 
         # Optimizer for continuous action variables - mean and variance
-        opt_init_mean, opt_update_mean, get_params_mean = adam_with_clipping(self.step_size)
+        opt_init_mean, opt_update_mean, get_params_mean = self.opt_clip_fn(step_size_real)
         opt_state_mean = opt_init_mean(ac_mean[:, :, self.real_ga_idx])
 
-        opt_init_var, opt_update_var, get_params_var = adam_with_clipping(self.step_size_var)
-        opt_state_var = opt_init_var(ac_var)
+        opt_init_var, opt_update_var, get_params_var = self.opt_clip_fn(step_size_var_real)
+        opt_state_var = opt_init_var(ac_var[:, :, self.real_ga_idx])
 
         # Optimizer for binary action variables - mean
-        opt_init_bin, opt_update_bin, get_params_bin = adam_with_projection(self.step_size, proj_fn=self.batch_projection)
+        opt_init_bin, opt_update_bin, get_params_bin = self.opt_proj_fn(step_size_bool, proj_fn=self.batch_projection)
         opt_state_bin = opt_init_bin(ac_mean[:, :, self.bool_ga_idx])
 
         n_grad_steps = 0
@@ -194,19 +208,24 @@ class ContinuousDisprod():
 
             # Compute Q-value function for all restarts
             reward, _subkey1 = self.batch_q_fn(state, scaled_ac_mu, scaled_ac_var, _key)
-
+            #jax.debug.print("Reward {reward}", reward=reward)
+            
             # Compute gradients with respect to action means and action variance.
             grad_mean, grad_var = self.batch_grad_q_fn(state, scaled_ac_mu, scaled_ac_var, _key)
-
+            # grad_mean = clip_grads(grad_mean, self.clip_grad)
+            # grad_var = clip_grads(grad_var, self.clip_grad)
+            
+            
             # Update mean of real actions.
             opt_state_mean = opt_update_mean(n_grad_steps, -grad_mean[:, :, self.real_ga_idx], opt_state_mean, 0, 1)
             r_ac_mu_upd = get_params_mean(opt_state_mean)
             ac_mu_upd = ac_mu_init.at[:, :, self.real_ga_idx].set(r_ac_mu_upd)
 
             # Update variance of real actions.
-            wiggle_room = jnp.minimum(ac_mu_upd - 0, 1 - ac_mu_upd)
-            opt_state_var = opt_update_var(n_grad_steps, -grad_var, opt_state_var, 0, jnp.minimum(1/12, jnp.square(wiggle_room)/12))
-            ac_var_upd = get_params_var(opt_state_var)
+            wiggle_room = jnp.minimum(ac_mu_upd - 0, 1 - ac_mu_upd)[:, :, self.real_ga_idx]
+            opt_state_var = opt_update_var(n_grad_steps, -grad_var[:, :, self.real_ga_idx], opt_state_var, 0, jnp.minimum(1/12, jnp.square(wiggle_room)/12))
+            r_ac_var_upd = get_params_var(opt_state_var)
+            ac_var_upd = ac_var_init.at[:, :, self.real_ga_idx].set(r_ac_var_upd)
 
             # Update mean of boolean actions
             opt_state_bin = opt_update_bin(n_grad_steps, -grad_mean[:, :, self.bool_ga_idx], opt_state_bin)
@@ -216,6 +235,8 @@ class ContinuousDisprod():
             # Update variance of boolean actions
             bool_ac_var = ac_mu_upd[:, :, self.bool_ga_idx] * (1-ac_mu_upd[:, :, self.bool_ga_idx])
             ac_var_upd = ac_var_upd.at[:, :, self.bool_ga_idx].set(bool_ac_var)
+            
+            #jax.debug.print("ac_mu_upd {ac_mu_upd}", ac_mu_upd=ac_mu_upd)
 
             # Scale updated action means and variance from (0,1) to permissible action ranges
             scaled_ac_mu_upd, scaled_ac_var_upd = self.ac_dist_trans_fn(ac_mu_upd, ac_var_upd)

@@ -12,6 +12,7 @@ overwrite_ac_bounds: False
 fallback: False
 skip_search: False
 adjust_lr: True
+clip_grad: 1e-3
 
 logic: FuzzyLogic
 logic_kwargs: {weight: 10}
