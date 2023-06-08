@@ -143,28 +143,32 @@ def main(env, inst, method_name=None, episodes=1):
             combs = []
             for mode in ["no_var", "sampling"]:
                 for s_wt in [3, 5]:
-                    for restart in [cfg[mode]["n_restarts"], cfg[mode]["n_restarts"]/2]:
-                        if mode == "no_var":
-                            model = reparam_rddl_model
-                            _cfg_env = reparam_cfg_env
-                        else:
-                            model = rddl_model
-                            _cfg_env = cfg_env
-                        combs.append((mode, model, _cfg_env, s_wt, restart))
+                    #for restart in [cfg[mode]["n_restarts"], cfg[mode]["n_restarts"]/2]:
+                    restart = cfg[mode]["n_restarts"]
+                    if mode == "no_var":
+                        model = reparam_rddl_model
+                        _cfg_env = reparam_cfg_env
+                    else:
+                        model = rddl_model
+                        _cfg_env = cfg_env
+                    combs.append((mode, model, _cfg_env, s_wt, restart))
             scan_res = []
             
             heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, g_obs_keys, ga_keys, ac_dict_fn, n_episodes=5, time_budget=time_for_scan)
 
             # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
-            context = mp.get_context("spawn")
-            with ProcessPoolExecutor(mp_context=context) as executor:
-                jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, model, _cfg_env, s_wt, restart) for (mode, model, _cfg_env, s_wt, restart) in combs]
+            # context = mp.get_context("spawn")
+            # with ProcessPoolExecutor(mp_context=context) as executor:
+            #     jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, model, _cfg_env, s_wt, restart) for (mode, model, _cfg_env, s_wt, restart) in combs]
 
-                for job in as_completed(jobs):
-                    result = job.result()
-                    scan_res.append(result)
+            #     for job in as_completed(jobs):
+            #         result = job.result()
+            #         scan_res.append(result)
 
-            scan_res = sorted(scan_res, key=lambda x: (x[0]))
+            for  (mode, model, _cfg_env, s_wt, restart) in combs:
+                scan_res.append(heuristic_fn(copy.deepcopy(cfg), mode, model, _cfg_env, s_wt, restart))
+
+            scan_res = sorted(scan_res, key=lambda x: x[0])
             
             better_mode, better_weight, better_restart = scan_res[-1][1], scan_res[-1][2], scan_res[-1][3] 
             checkpoint = time.time()

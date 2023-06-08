@@ -29,7 +29,7 @@ def compute_score_stats(domain, instance, g_obs_keys, ga_keys, ac_dict_fn, cfg, 
     time_left = max(0, time_budget - (end - start))
     agg_reward, ep_time, prev_ac_seq, agent_key = eval_episode(g_obs_keys, ga_keys, env, agent, agent_key, prev_ac_seq, lrs_to_scan, ac_dict_fn)
     scores.append(agg_reward)
-    n_episodes = min(5, int(time_left/ep_time))
+    n_episodes = min(3, int(time_left/ep_time))
     
     # Evaluate the agent of the remaining number of episodes
     for i in range(n_episodes - 1):
