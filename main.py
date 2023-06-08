@@ -116,6 +116,11 @@ def main(env, inst, method_name=None, episodes=1):
         time_required_for_agent_setup = agent_setup_end-agent_setup_start
         print(f"[Time left: {init_budget - (agent_setup_end - start)}] Basic agent initialized. Time taken: {time_required_for_agent_setup}")
 
+        checkpoint = time.time()
+        # See if we have enough time for performing a scan
+        time_for_scan = init_budget - (checkpoint - start) - (time_required_for_agent_setup) - (300)
+        if time_for_scan < 240:
+            heuristic_scan = False
         # Perform heuristic scans       
         ##################################################################
         # H1: Search across different modes and see which is better
@@ -124,23 +129,22 @@ def main(env, inst, method_name=None, episodes=1):
             combs = []
             for mode in ["no_var", "sampling"]:
                 for s_wt in [3, 5]:
-                    for depth in [cfg["depth"], cfg["depth"]/2]:
+                    for restart in [cfg[mode]["n_restarts"], cfg[mode]["n_restarts"]/2]:
                         if mode == "no_var":
                             model = reparam_rddl_model
                             _cfg_env = reparam_cfg_env
                         else:
                             model = rddl_model
                             _cfg_env = cfg_env
-                        combs.append((mode, model, _cfg_env, s_wt, depth))
+                        combs.append((mode, model, _cfg_env, s_wt, restart))
             scan_res = []
-            checkpoint = time.time()
-            time_for_scan = init_budget - (checkpoint - start) - (time_required_for_agent_setup) - (300)
+            
             heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, g_obs_keys, ga_keys, ac_dict_fn, n_episodes=5, time=time_for_scan)
 
             # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
             context = mp.get_context("spawn")
             with ProcessPoolExecutor(mp_context=context) as executor:
-                jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, model, _cfg_env, s_wt, depth) for (mode, model, _cfg_env, s_wt, depth) in combs]
+                jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, model, _cfg_env, s_wt, restart) for (mode, model, _cfg_env, s_wt, restart) in combs]
 
                 for job in as_completed(jobs):
                     result = job.result()
@@ -148,14 +152,14 @@ def main(env, inst, method_name=None, episodes=1):
 
             scan_res = sorted(scan_res, key=lambda x: (x[0]))
             
-            better_mode, better_weight, better_depth = scan_res[-1][1], scan_res[-1][2], scan_res[-1][3] 
+            better_mode, better_weight, better_restart = scan_res[-1][1], scan_res[-1][2], scan_res[-1][3] 
             checkpoint = time.time()
             print(f"[Time left: {init_budget - (checkpoint - start)}] Heuristic scan complete.")
 
-            if better_mode != cfg["mode"] or better_weight != cfg["logic_kwargs"]["weight"] or better_depth != cfg["depth"]:
+            if better_mode != cfg["mode"] or better_weight != cfg["logic_kwargs"]["weight"] or better_restart != cfg[better_mode]["n_restarts"]:
                 cfg["mode"] = better_mode
                 cfg["logic_kwargs"]["weight"] = better_weight
-                cfg["depth"] = better_depth
+                cfg[better_mode]["n_restarts"] = better_restart
                 if cfg["mode"] == "sampling":
                     new_agent = ContinuousDisprod(cfg, rddl_model, cfg_env)
                     new_lrs_to_scan = agent.pre_warm(dummy_obs)
