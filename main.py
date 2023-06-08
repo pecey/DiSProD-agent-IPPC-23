@@ -97,6 +97,11 @@ def main(env, inst, method_name=None, episodes=1):
         # Get a dummy obs
         dummy_state = myEnv.reset()
         dummy_obs = np.array([dummy_state[i] for i in g_obs_keys])
+
+        # Instance 1 of marsrover works better when prewarmed using all zeros.
+        if cfg["env_name"] == "marsrover" and inst == "1c":
+            dummy_obs = np.zeros_like(dummy_obs)
+            
         # Setup default agent depending on the default mode
         agent_setup_start = time.time()
         if cfg["mode"] == "sampling":
