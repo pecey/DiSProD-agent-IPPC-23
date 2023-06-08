@@ -518,12 +518,13 @@ def sop_numerical(ns_and_rew_concat, nS, nA):
         return sop_s, sop_a
     return _sop_numerical
 
-def compute_ac_bounds(ac_space, a_keys, overwrite_ac_bounds, ac_bounds_user, posinf=100, neginf=-100):
+def compute_ac_bounds(ac_space, a_keys, overwrite_ac_bounds, ac_bounds_user = {}, posinf=100, neginf=-100):
     ac_lb, ac_ub = [], []
     for a in a_keys:
         ac_obj = ac_space[a]
-        if overwrite_ac_bounds:
-            _bounds = ac_bounds_user[a.split("__")[0].strip()]
+        ac_bounds_user_key = a.split("__")[0].strip()
+        if overwrite_ac_bounds and ac_bounds_user_key in ac_bounds_user.keys():
+            _bounds = ac_bounds_user[ac_bounds_user_key]
             ac_lb.append(_bounds[0])
             ac_ub.append(_bounds[1])
         else:

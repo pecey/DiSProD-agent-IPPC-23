@@ -3,9 +3,11 @@ depth: 150
 
 logic: FuzzyLogic
 logic_kwargs: {weight: 3}
+overwrite_ac_bounds: True
 
-posinf: 15
-neginf: -15
+
+posinf: 100
+neginf: -100
 
 mode: sampling
 
@@ -13,15 +15,20 @@ complete:
   step_size: 10
   step_size_var: 10
   n_restarts: 200
+  action_bounds: {"heat-input": [-15, 15]}
+
 
 no_var:
   step_size: 0.5
   step_size_var: 0
   n_restarts: 400
   lrs_to_scan: [0.001, 0.01, 1]
+  action_bounds: {"heat-input": [-15, 15]}
+
 
 sampling:
   step_size: 0.5
   step_size_var: 0
   n_restarts: 400
   lrs_to_scan: [0.001, 0.01, 1]
+  action_bounds: {"heat-input": [-15, 15]}
