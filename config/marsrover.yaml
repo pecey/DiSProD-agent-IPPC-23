@@ -1,5 +1,5 @@
 env_name: marsrover
-depth: 2
+depth: 100
 projection_fn: planners.projections:project_dummy
 
 logic: FuzzyLogic
@@ -17,9 +17,9 @@ complete:
 sampling:
   step_size: 1
   step_size_var: 0.001
-  n_restarts: 1
+  n_restarts: 500
 
 no_var:
   step_size: 1
   step_size_var: 0.001
-  n_restarts: 1
+  n_restarts: 500
