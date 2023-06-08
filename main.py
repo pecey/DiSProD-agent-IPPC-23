@@ -123,21 +123,24 @@ def main(env, inst, method_name=None, episodes=1):
         if heuristic_scan:
             combs = []
             for mode in ["no_var", "sampling"]:
-                for s_wt in [1, 3, 5, 10]:
-                    if mode == "no_var":
-                        model = reparam_rddl_model
-                        _cfg_env = reparam_cfg_env
-                    else:
-                        model = rddl_model
-                        _cfg_env = cfg_env
-                    combs.append((mode, model, _cfg_env, s_wt))
+                for s_wt in [3, 5]:
+                    for depth in [cfg["depth"], cfg["depth"]/2]:
+                        if mode == "no_var":
+                            model = reparam_rddl_model
+                            _cfg_env = reparam_cfg_env
+                        else:
+                            model = rddl_model
+                            _cfg_env = cfg_env
+                        combs.append((mode, model, _cfg_env, s_wt, depth))
             scan_res = []
-            heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, g_obs_keys, ga_keys, ac_dict_fn, n_episodes=5)
+            checkpoint = time.time()
+            time_for_scan = init_budget - (checkpoint - start) - (time_required_for_agent_setup) - (300)
+            heuristic_fn = partial(heuristics.compute_score_stats, domain_path, instance_path, g_obs_keys, ga_keys, ac_dict_fn, n_episodes=5, time=time_for_scan)
 
             # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
             context = mp.get_context("spawn")
             with ProcessPoolExecutor(mp_context=context) as executor:
-                jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, model, _cfg_env, s_wt) for (mode, model, _cfg_env, s_wt) in combs]
+                jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, model, _cfg_env, s_wt, depth) for (mode, model, _cfg_env, s_wt, depth) in combs]
 
                 for job in as_completed(jobs):
                     result = job.result()
@@ -145,13 +148,14 @@ def main(env, inst, method_name=None, episodes=1):
 
             scan_res = sorted(scan_res, key=lambda x: (x[0]))
             
-            better_mode, better_weight = scan_res[-1][1], scan_res[-1][2] 
+            better_mode, better_weight, better_depth = scan_res[-1][1], scan_res[-1][2], scan_res[-1][3] 
             checkpoint = time.time()
             print(f"[Time left: {init_budget - (checkpoint - start)}] Heuristic scan complete.")
 
-            if better_mode != cfg["mode"] or better_weight != cfg["logic_kwargs"]["weight"]:
+            if better_mode != cfg["mode"] or better_weight != cfg["logic_kwargs"]["weight"] or better_depth != cfg["depth"]:
                 cfg["mode"] = better_mode
                 cfg["logic_kwargs"]["weight"] = better_weight
+                cfg["depth"] = better_depth
                 if cfg["mode"] == "sampling":
                     new_agent = ContinuousDisprod(cfg, rddl_model, cfg_env)
                     new_lrs_to_scan = agent.pre_warm(dummy_obs)
@@ -166,27 +170,6 @@ def main(env, inst, method_name=None, episodes=1):
                 checkpoint = time.time()
                 print(f"[Time left: {init_budget - (checkpoint - start)}] Found better config during scan. New agent initialized.")
         
-
-        # #################################################################
-        # # H2: Compute the average time taken per mode
-        # ##################################################################
-        # combs = [("no_var", cfg["depth"]), ("sampling", cfg["depth"])]
-        # scan_res = []
-        # heuristic_fn = partial(heuristics.compute_avg_action_time, domain_path, instance_path, rddl_model, cfg_env, g_obs_keys, ga_keys)
-
-        # # JAX doesn't fork with fork context which is default for Linux. Start a spawn context explicitly.
-        # context = mp.get_context("spawn")
-        # with ProcessPoolExecutor(mp_context=context) as executor:
-        #     jobs = [executor.submit(heuristic_fn, copy.deepcopy(cfg), mode, depth) for mode, depth in combs]
-
-        #     for job in as_completed(jobs):
-        #         result = job.result()
-        #         print(result)
-        #         scan_res.append(result)
-
-        # scan_res = sorted(scan_res, key=lambda x: (x[0], x[1]))
-        # print(scan_res)
-
         
         ##############################################################
     except:
