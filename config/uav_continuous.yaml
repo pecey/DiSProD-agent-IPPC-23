@@ -1,23 +1,23 @@
-env_name: uav-continuous
+env_name: uav
 max_episode_steps: 200
-depth: 30
+depth: 10
 
 logic: FuzzyLogic
-logic_kwargs: {weight: 20}
+logic_kwargs: {weight: 5}
 
-mode: no_var
+mode: sampling
 
 complete:
   step_size: 10
   step_size_var: 1
-  n_restarts: 200
+  n_restarts: 400
 
 sampling:
   step_size: 10
   step_size_var: 1
-  n_restarts: 200
+  n_restarts: 400
 
 no_var:
   step_size: 10
   step_size_var: 1
-  n_restarts: 200
+  n_restarts: 400

@@ -1,9 +1,15 @@
 import jax.numpy as jnp
+import jax
 import re
-
+import numpy as np
 from pyRDDLGymHelper.Core.Parser import parser as Rddlparser
 from pyRDDLGymHelper.Core.Parser.RDDLReader import RDDLReader
 from pyRDDLGymHelper.Core.Compiler.RDDLLiftedModel import RDDLLiftedModel
+
+from functools import partial
+from utils.common_utils import load_method
+
+from gym.spaces import Dict, Box
 
 EPS_STR = {"normal": "disprod_eps_norm",
            "uniform": "disprod_eps_uni",
@@ -130,7 +136,7 @@ def reparam_rddl(rddltxt):
     return rddltxt
 
 
-def prepare_cfg_env(myEnv, rddl_model):
+def prepare_cfg_env(env_name, myEnv, rddl_model, cfg):
     g_obs_keys = [key for key in rddl_model.groundstates().keys() if key not in DISPROD_NOISE_VARS]
     s_keys, a_keys, ga_keys, ns_keys, bool_s_idx, bool_ga_idx, real_ga_idx = prepare_rddl_compilations(rddl_model)
     init_subs = myEnv.sampler.subs
@@ -156,4 +162,76 @@ def prepare_cfg_env(myEnv, rddl_model):
     cfg_env["nS"] = len(myEnv.observation_space)
     cfg_env["s_gs_idx"] = s_gs_idx
     cfg_env["a_ga_idx"] = a_ga_idx
-    return g_obs_keys,ga_keys,cfg_env
+    
+    # projection_fn = load_method(cfg["projection_fn"])
+    
+    if "recsim" in env_name.lower():
+        # n_consumer = len(rddl_model.objects["consumer"])
+        n_item = len(rddl_model.objects["item"]) 
+        # cfg_env["projection_fn"] = jax.vmap(partial(projection_fn, len(bool_ga_idx), n_consumer, n_item), in_axes=(0), out_axes=(0))
+        ac_dict_fn = partial(prep_ac_dict_recsim, n_item)
+    else:
+        # cfg_env["projection_fn"] = jax.vmap(partial(projection_fn, len(bool_ga_idx)), in_axes=(0), out_axes=(0))
+        ga_keys_output_mapping = {idx: ((key, float) if idx in real_ga_idx else (key, int))  for idx, key in enumerate(ga_keys)}    
+        ac_dict_fn = partial(prep_ac_dict, ga_keys_output_mapping)
+    
+    return g_obs_keys,ga_keys,ac_dict_fn,cfg_env
+
+def prepare_cfg_env_fallback_recsim(myEnv, cfg, rddl_model):
+    g_obs_keys = [key for key in rddl_model.groundstates().keys() if key not in DISPROD_NOISE_VARS]
+    n_consumer = len(rddl_model.objects["consumer"])
+    n_item = len(rddl_model.objects["item"])
+             
+    a_keys = list(rddl_model.actions.keys())
+    s_keys = list(rddl_model.states.keys())
+    obs_keys = [key for key in s_keys if key not in DISPROD_NOISE_VARS]
+    ns_keys = [f"{k}'" for k in s_keys if k not in DISPROD_NOISE_VARS]
+    
+    init_subs = myEnv.sampler.subs
+    bool_s_idx = [idx for idx,key in enumerate(s_keys) if rddl_model.statesranges[key] == "bool"]
+    s_gs_idx = prepare_index_mapping(obs_keys, rddl_model.grounded_names, init_subs, noise_vars=True)
+    
+    cfg_env = {}
+    cfg_env["s_keys"] = obs_keys + DISPROD_NOISE_VARS
+    cfg_env["a_keys"] = a_keys
+    cfg_env["ns_keys"] = ns_keys
+    cfg_env['bool_s_idx'] = bool_s_idx
+    cfg_env["n_concurrent_ac"] = 1
+    cfg_env["nS"] = len(myEnv.observation_space)
+    cfg_env["s_gs_idx"] = s_gs_idx
+            
+    cfg_env["nA"] = n_consumer
+    cfg_env["action_space"] = Dict()
+    for i in range(n_consumer):
+        cfg_env["action_space"][f"recommend__{i+1}"] = Box(low = 0, high = n_item - 1, dtype=np.float32)
+    cfg_env['ga_keys'] = [f"recommend__{i+1}" for i in range(n_consumer)]
+    cfg_env['bool_ga_idx'] = []
+    cfg_env['real_ga_idx'] = np.arange(0, n_consumer).tolist()
+    cfg_env["noop_ac"] = [0.0 for i in range(n_consumer)]
+            
+    cfg["projection_fn"] = "planners.projections:project_dummy"
+    cfg[cfg["mode"]]["restarts"]=2000
+    cfg[cfg["mode"]]["overwrite_lrs"] = True
+    cfg[cfg["mode"]]["lrs_to_scan"] = [0 for _ in range(n_consumer)]
+    cfg["fallback"] = True
+    ac_dict_fn = partial(prep_ac_dict_recsim_fallback, n_consumer, n_item)
+    
+    return g_obs_keys, ac_dict_fn, cfg_env
+
+
+def prep_ac_dict(ga_keys_output_mapping, ac_array, k_idx):
+    action = {ga_keys_output_mapping[int(idx)][0]: ga_keys_output_mapping[int(idx)][1](ac_array[idx]) for idx in k_idx}
+    return action
+
+def prep_ac_dict_recsim(n_item, ac_array, k_idx):
+    best_ac = np.argmax(ac_array)
+    con = int(best_ac/n_item)
+    item = best_ac - (n_item * con)
+    action = {f"recommend___c{con+1}__i{item+1}": 1}
+    return action
+
+def prep_ac_dict_recsim_fallback(n_consumer, n_item, ac_array, k_idx):
+    consumer = np.argmax(ac_array)
+    item = np.round(ac_array[consumer])
+    action = {f"recommend___c{int(consumer) + 1}__i{int(item) + 1}": 1}
+    return action

@@ -1,22 +1,28 @@
-env_name: reservoir-continuous
+env_name: reservoir
 depth: 5
 
 logic: FuzzyLogic
-logic_kwargs: {weight: 20}
+logic_kwargs: {weight: 5}
 
-mode: no_var
+mode: sampling
 
 complete:
   step_size: 1
   step_size_var: 0.1
   n_restarts: 2000
+  lrs_to_scan: [0.001, 0.1, 1]
+  overwrite_lrs: True
 
 sampling:
   step_size: 1
   step_size_var: 0.1
   n_restarts: 2000
+  lrs_to_scan: [0.001, 0.1, 1]
+  overwrite_lrs: True
 
 no_var:
   step_size: 1
   step_size_var: 0.1
   n_restarts: 2000
+  lrs_to_scan: [0.001, 0.1, 1]
+  overwrite_lrs: True

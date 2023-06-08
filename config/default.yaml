@@ -8,13 +8,27 @@ save_actions: True
 posinf: 100
 neginf: -100
 projection_fn: planners.projections:project_dummy
+overwrite_ac_bounds: False
+fallback: False
+skip_search: False
+adjust_lr: True
+clip_grad: 1e-3
 
 logic: FuzzyLogic
-logic_kwargs: {weight: 100}
+logic_kwargs: {weight: 10}
 tnorm: ProductTNorm
 tnorm_kwargs : {}
 
-mode: no_var
+
+cem:
+  n_samples: 200
+  optimization_steps: 10
+  elite_size: 20
+
+mppi:
+  n_samples: 2000
+  optimization_steps: 10
+  gamma: 1.0
 
 complete:
   step_size: 0.001
@@ -26,6 +40,9 @@ complete:
   sop: numeric
   convergance_threshold: 0.1
   optimizer: adam
+  lrs_to_scan: [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1e0, 1e1]
+  overwrite_lrs: False
+
 
 sampling:
   step_size: 0.001
@@ -37,6 +54,9 @@ sampling:
   sop: numeric
   convergance_threshold: 0.1
   optimizer: adam
+  lrs_to_scan: [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1e0, 1e1]
+  overwrite_lrs: False
+
 
 no_var:
   step_size: 0.001
@@ -48,3 +68,5 @@ no_var:
   sop: numeric
   convergance_threshold: 0.1
   optimizer: adam
+  lrs_to_scan: [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1e0, 1e1]
+  overwrite_lrs: False

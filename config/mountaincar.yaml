@@ -1,10 +1,10 @@
-env_name: mountain-car
+env_name: mountaincar
 depth: 100
 
 logic: FuzzyLogic
-logic_kwargs: {weight: 50}
+logic_kwargs: {weight: 5}
 
-mode: no_var
+mode: sampling
 
 complete:
   step_size: 0.1

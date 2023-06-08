@@ -17,7 +17,6 @@ def adam_with_clipping(step_size, b1=0.9, b2=0.999, eps=1e-8):
   Returns:
     An (init_fun, update_fun, get_params) triple.
   """
-  step_size = make_schedule(step_size)
   def init(x0):
     m0 = jnp.zeros_like(x0)
     v0 = jnp.zeros_like(x0)
@@ -28,7 +27,7 @@ def adam_with_clipping(step_size, b1=0.9, b2=0.999, eps=1e-8):
     v = (1 - b2) * jnp.square(g) + b2 * v  # Second moment estimate.
     mhat = m / (1 - jnp.asarray(b1, m.dtype) ** (i + 1))  # Bias correction.
     vhat = v / (1 - jnp.asarray(b2, m.dtype) ** (i + 1))
-    x =  jnp.clip(x - step_size(i) * mhat / (jnp.sqrt(vhat) + eps), project_lb, project_ub)
+    x =  jnp.clip(x - step_size * mhat / (jnp.sqrt(vhat) + eps), project_lb, project_ub)
     return x, m, v
   def get_params(state):
     x, _, _ = state
@@ -52,7 +51,6 @@ def adam_with_projection(step_size, b1=0.9, b2=0.999, eps=1e-8, proj_fn = lambda
   Returns:
     An (init_fun, update_fun, get_params) triple.
   """
-  step_size = make_schedule(step_size)
   def init(x0):
     m0 = jnp.zeros_like(x0)
     v0 = jnp.zeros_like(x0)
@@ -63,9 +61,62 @@ def adam_with_projection(step_size, b1=0.9, b2=0.999, eps=1e-8, proj_fn = lambda
     v = (1 - b2) * jnp.square(g) + b2 * v  # Second moment estimate.
     mhat = m / (1 - jnp.asarray(b1, m.dtype) ** (i + 1))  # Bias correction.
     vhat = v / (1 - jnp.asarray(b2, m.dtype) ** (i + 1))
-    x =  proj_fn(x - step_size(i) * mhat / (jnp.sqrt(vhat) + eps))
+    x =  proj_fn(x - step_size * mhat / (jnp.sqrt(vhat) + eps))
     return x, m, v
   def get_params(state):
     x, _, _ = state
+    return x
+  return init, update, get_params
+
+
+def rmsprop_with_clipping(step_size, gamma=0.9, eps=1e-8):
+  """Construct optimizer triple for RMSProp.
+
+  Args:
+    step_size: positive scalar, or a callable representing a step size schedule
+      that maps the iteration index to a positive scalar.
+      gamma: Decay parameter.
+      eps: Epsilon parameter.
+
+  Returns:
+    An (init_fun, update_fun, get_params) triple.
+  """
+  # step_size = make_schedule(step_size)
+  def init(x0):
+    avg_sq_grad = jnp.zeros_like(x0)
+    return x0, avg_sq_grad
+  def update(i, g, state, project_lb, project_ub):
+    x, avg_sq_grad = state
+    avg_sq_grad = avg_sq_grad * gamma + jnp.square(g) * (1. - gamma)
+    x = jnp.clip(x - step_size * g / jnp.sqrt(avg_sq_grad + eps), project_lb, project_ub)
+    return x, avg_sq_grad
+  def get_params(state):
+    x, _ = state
+    return x
+  return init, update, get_params
+
+
+def rmsprop_with_projection(step_size, gamma=0.9, eps=1e-8, proj_fn = lambda x: x):
+  """Construct optimizer triple for RMSProp.
+
+  Args:
+    step_size: positive scalar, or a callable representing a step size schedule
+      that maps the iteration index to a positive scalar.
+      gamma: Decay parameter.
+      eps: Epsilon parameter.
+
+  Returns:
+    An (init_fun, update_fun, get_params) triple.
+  """
+  def init(x0):
+    avg_sq_grad = jnp.zeros_like(x0)
+    return x0, avg_sq_grad
+  def update(i, g, state):
+    x, avg_sq_grad = state
+    avg_sq_grad = avg_sq_grad * gamma + jnp.square(g) * (1. - gamma)
+    x = proj_fn(x - step_size * g / jnp.sqrt(avg_sq_grad + eps))
+    return x, avg_sq_grad
+  def get_params(state):
+    x, _ = state
     return x
   return init, update, get_params

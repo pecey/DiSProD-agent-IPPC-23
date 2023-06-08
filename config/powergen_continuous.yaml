@@ -2,24 +2,31 @@ env_name: powergen
 depth: 30
 
 logic: FuzzyLogic
-logic_kwargs: {weight: 10}
+logic_kwargs: {weight: 5}
+overwrite_ac_bounds: True
 
-mode: no_var
+
+mode: sampling
 
 complete:
   step_size: 0.0001
   step_size_var: 0.001
   n_restarts: 400
   optimizer: rmsprop
+  action_bounds: {"curProd": [1, 10]}
+
 
 sampling:
   step_size: 0.1
   step_size_var: 1
   n_restarts: 200
   optimizer: rmsprop
+  action_bounds: {"curProd": [1, 10]}
+
 
 no_var:
   step_size: 0.1
   step_size_var: 1
   n_restarts: 200
   optimizer: rmsprop
+  action_bounds: {"curProd": [1, 10]}

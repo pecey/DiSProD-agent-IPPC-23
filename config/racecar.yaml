@@ -1,8 +1,8 @@
-env_name: racecar-continuous
+env_name: racecar
 max_episode_steps: 200
 depth: 100
 
-mode: no_var
+mode: sampling
 
 complete:
   step_size: 0.001
