@@ -1,13 +1,13 @@
 env_name: hvac
-depth: 150
+depth: 100
 
 logic: FuzzyLogic
 logic_kwargs: {weight: 3}
 overwrite_ac_bounds: True
 
 
-posinf: 100
-neginf: -100
+posinf: 200
+neginf: 0
 
 mode: sampling
 

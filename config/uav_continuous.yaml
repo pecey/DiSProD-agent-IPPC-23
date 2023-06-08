@@ -1,6 +1,6 @@
 env_name: uav
 max_episode_steps: 200
-depth: 10
+depth: 15
 
 logic: FuzzyLogic
 logic_kwargs: {weight: 5}
