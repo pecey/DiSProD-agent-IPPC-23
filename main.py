@@ -79,8 +79,17 @@ def main(env, inst, method_name=None, episodes=1):
         rddl_model = helpers.gen_model(domain_path, instance_path, False)
         reparam_rddl_model = helpers.gen_model(domain_path, instance_path, True)
 
-        # For large RecSim instances and MarsRover       
-        fallback = True if len(myEnv.action_space) > 250 else False
+        # For large RecSim instances.       
+        if len(myEnv.action_space) > 250 or len(myEnv.observation_space) > 2500:
+            fallback = True
+            cfg["no_var"]["n_restarts"] = 2
+            cfg["sampling"]["n_restarts"] = 2
+            cfg["depth"] = 2
+            cfg["no_var"]["max_grad_steps"]=2
+            cfg["sampling"]["max_grad_steps"]=2
+        else:
+            fallback = False
+
         heuristic_scan = False if fallback or cfg["skip_search"] else True
         
         
@@ -101,7 +110,7 @@ def main(env, inst, method_name=None, episodes=1):
         # Instance 1 of marsrover works better when prewarmed using all zeros.
         if cfg["env_name"] == "marsrover" and inst == "1c":
             dummy_obs = np.zeros_like(dummy_obs)
-            
+
         # Setup default agent depending on the default mode
         agent_setup_start = time.time()
         if cfg["mode"] == "sampling":

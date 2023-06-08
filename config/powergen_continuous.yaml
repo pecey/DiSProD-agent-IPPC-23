@@ -19,7 +19,7 @@ complete:
 sampling:
   step_size: 0.1
   step_size_var: 1
-  n_restarts: 200
+  n_restarts: 2000
   optimizer: rmsprop
   action_bounds: {"curProd": [1, 10]}
 
@@ -27,6 +27,6 @@ sampling:
 no_var:
   step_size: 0.1
   step_size_var: 1
-  n_restarts: 200
+  n_restarts: 2000
   optimizer: rmsprop
   action_bounds: {"curProd": [1, 10]}

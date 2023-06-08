@@ -11,7 +11,7 @@ projection_fn: planners.projections:project_dummy
 overwrite_ac_bounds: False
 fallback: False
 skip_search: False
-adjust_lr: True
+adjust_lr: False
 clip_grad: 1e-3
 
 logic: FuzzyLogic

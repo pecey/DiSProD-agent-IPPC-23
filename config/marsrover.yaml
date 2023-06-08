@@ -6,7 +6,6 @@ logic: FuzzyLogic
 logic_kwargs: {weight: 5}
 
 mode: sampling
-skip_search: True
 adjust_lr: False
 
 complete:
