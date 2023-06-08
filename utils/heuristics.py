@@ -6,7 +6,7 @@ from pyRDDLGym import RDDLEnv
 from pyRDDLGym.Policies.Agents import NoOpAgent
 
 
-def compute_score_stats(domain, instance, g_obs_keys, ga_keys, ac_dict_fn, cfg, mode, rddl_model, cfg_env, s_weight,  n_restarts, n_episodes=10, time = 1200):
+def compute_score_stats(domain, instance, g_obs_keys, ga_keys, ac_dict_fn, cfg, mode, rddl_model, cfg_env, s_weight,  n_restarts, n_episodes=10, time_budget = 1200):
     start = time.time()
     env = RDDLEnv.RDDLEnv(domain=domain,
                             instance=instance,
@@ -26,15 +26,18 @@ def compute_score_stats(domain, instance, g_obs_keys, ga_keys, ac_dict_fn, cfg, 
     scores = []
     end = time.time()
     # Evaluate the agent for one episode and compute how many episodes can we afford
-    time_left = max(0, time - (end - start))
+    time_left = max(0, time_budget - (end - start))
     agg_reward, ep_time, prev_ac_seq, agent_key = eval_episode(g_obs_keys, ga_keys, env, agent, agent_key, prev_ac_seq, lrs_to_scan, ac_dict_fn)
     scores.append(agg_reward)
-    n_episodes = min(10, int(time_left/ep_time))
+    n_episodes = min(5, int(time_left/ep_time))
     
     # Evaluate the agent of the remaining number of episodes
     for i in range(n_episodes - 1):
-        agg_reward, _, prev_ac_seq, agent_key = eval_episode(g_obs_keys, ga_keys, env, agent, agent_key, prev_ac_seq, lrs_to_scan, ac_dict_fn)
+        agg_reward, ep_time, prev_ac_seq, agent_key = eval_episode(g_obs_keys, ga_keys, env, agent, agent_key, prev_ac_seq, lrs_to_scan, ac_dict_fn)
         scores.append(agg_reward)
+        time_left = time_left - ep_time
+        if time_left <=0:
+            break
     del agent
     env.close()
     return np.mean(scores) - np.std(scores), mode, s_weight, n_restarts

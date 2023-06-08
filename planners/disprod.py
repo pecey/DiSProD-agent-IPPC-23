@@ -163,7 +163,7 @@ class ContinuousDisprod():
     def choose_action(self, obs, prev_ac_seq, key, lrs_to_scan):
         ac_seq = prev_ac_seq
 
-        lr_matrix = setup_lr_matrix(lrs_to_scan, self.n_res_lr, self.depth)
+        lr_matrix = setup_lr_matrix(jnp.array(lrs_to_scan).astype('float32'), self.n_res_lr, self.depth)
         n_res = lr_matrix.shape[0]
 
         # Create a vector of obs corresponding to n_restarts
